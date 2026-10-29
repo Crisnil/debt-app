@@ -7,6 +7,8 @@ export type CardSummary = {
   card: Card
   snapshot: CardSnapshot | null
   paidSinceStatement: Centavos
+  /** Payments dated after today. Shown, but not subtracted from the amount due. */
+  plannedPayments: Centavos
   remainingDue: Centavos
   status: DueStatus
   daysToDue: number | null
@@ -38,11 +40,11 @@ export function summarizeCard(workbook: Workbook, card: Card, today: IsoDate): C
     workbook.snapshots.filter((s) => s.cardId === card.cardId),
     (s) => s.asOf,
   )
-  const paidSinceStatement = snapshot
-    ? workbook.payments
-        .filter((p) => p.cardId === card.cardId && p.date >= snapshot.asOf)
-        .reduce((sum, p) => sum + p.amount, 0)
-    : 0
+  const sinceStatement = snapshot
+    ? workbook.payments.filter((p) => p.cardId === card.cardId && p.date >= snapshot.asOf)
+    : []
+  const paidSinceStatement = sinceStatement.filter((p) => p.date <= today).reduce((sum, p) => sum + p.amount, 0)
+  const plannedPayments = sinceStatement.filter((p) => p.date > today).reduce((sum, p) => sum + p.amount, 0)
   const remainingDue = snapshot ? Math.max(snapshot.currentDue - paidSinceStatement, 0) : 0
   const daysToDue = snapshot?.dueDate ? daysBetween(today, snapshot.dueDate) : null
   let status: DueStatus = 'no-statement'
@@ -64,6 +66,7 @@ export function summarizeCard(workbook: Workbook, card: Card, today: IsoDate): C
     card,
     snapshot,
     paidSinceStatement,
+    plannedPayments,
     remainingDue,
     status,
     daysToDue,

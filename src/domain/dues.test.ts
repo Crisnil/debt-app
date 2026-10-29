@@ -36,6 +36,16 @@ describe('summarizeDues', () => {
     expect(dues.totalRemainingDue).toBe(300000)
   })
 
+  it('shows future-dated payments as planned, not paid', () => {
+    const early = summarizeDues(wb, '2030-01-12').cards.find((c) => c.card.cardId === 'alpha')!
+    expect(early.paidSinceStatement).toBe(0)
+    expect(early.plannedPayments).toBe(100075)
+    expect(early.remainingDue).toBe(400075)
+    const onTheDay = summarizeDues(wb, '2030-01-15').cards.find((c) => c.card.cardId === 'alpha')!
+    expect(onTheDay.paidSinceStatement).toBe(100075)
+    expect(onTheDay.plannedPayments).toBe(0)
+  })
+
   it('marks an unpaid card past its due date as overdue', () => {
     const late = summarizeDues(wb, '2030-02-02').cards.find((c) => c.card.cardId === 'alpha')!
     expect(late.status).toBe('overdue')

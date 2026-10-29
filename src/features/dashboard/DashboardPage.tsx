@@ -23,8 +23,11 @@ const statusStyle: Record<DueStatus, string> = {
 function dueText(c: CardSummary) {
   if (c.daysToDue === null || !c.snapshot) return ''
   if (c.status === 'paid') return `Due ${c.snapshot.dueDate}`
-  if (c.daysToDue === 0) return 'Due today'
-  return c.daysToDue > 0 ? `Due in ${c.daysToDue} days (${c.snapshot.dueDate})` : `${-c.daysToDue} days late (${c.snapshot.dueDate})`
+  const date = c.snapshot.dueDate
+  if (c.daysToDue === 0) return `Due today (${date})`
+  if (c.daysToDue === 1) return `Due tomorrow (${date})`
+  if (c.daysToDue === -1) return `1 day late (${date})`
+  return c.daysToDue > 0 ? `Due in ${c.daysToDue} days (${date})` : `${-c.daysToDue} days late (${date})`
 }
 
 function CardRow({ c }: { c: CardSummary }) {
@@ -43,6 +46,12 @@ function CardRow({ c }: { c: CardSummary }) {
             <dd className="text-right text-slate-800">{formatPeso(c.snapshot.currentDue)}</dd>
             <dt className="text-slate-500">Paid since statement</dt>
             <dd className="text-right text-slate-800">{formatPeso(c.paidSinceStatement)}</dd>
+            {c.plannedPayments > 0 && (
+              <>
+                <dt className="text-slate-500">Planned payment</dt>
+                <dd className="text-right text-slate-800">{formatPeso(c.plannedPayments)}</dd>
+              </>
+            )}
             <dt className="text-slate-500">Minimum</dt>
             <dd className="text-right text-slate-800">{formatPeso(c.snapshot.minimumDue)}</dd>
             {c.installmentCount > 0 && (
