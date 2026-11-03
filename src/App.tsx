@@ -5,7 +5,7 @@ import { Placeholder } from './features/Placeholder'
 import { ReconcilePage } from './features/reconcile/ReconcilePage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { useSync } from './state/hooks'
-import { BottomNav } from './ui/BottomNav'
+import { MainNav } from './ui/MainNav'
 
 function SyncBar() {
   const { pending, syncing, error, syncNow } = useSync()
@@ -25,20 +25,22 @@ function SyncBar() {
 
 export default function App() {
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-      <SyncBar />
-      <main className="flex-1 px-4 pt-6 pb-24">
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/add" element={<AddPage />} />
-          <Route path="/reconcile/:cardId" element={<ReconcilePage />} />
-          <Route path="/purchases" element={<Placeholder title="Purchases" phase={5} detail="All purchases from every card and cash." />} />
-          <Route path="/budget" element={<Placeholder title="Budget" phase={5} detail="This week per category vs. the weekly limit." />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-      <BottomNav />
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col lg:max-w-7xl lg:flex-row">
+      <MainNav />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <SyncBar />
+        <main className="flex-1 px-4 pt-6 pb-24 lg:px-10 lg:pt-8 lg:pb-10">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/add" element={<AddPage />} />
+            <Route path="/reconcile/:cardId" element={<ReconcilePage />} />
+            <Route path="/purchases" element={<Placeholder title="Purchases" phase={5} detail="All purchases from every card and cash." />} />
+            <Route path="/budget" element={<Placeholder title="Budget" phase={5} detail="This week per category vs. the weekly limit." />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
     </div>
   )
 }

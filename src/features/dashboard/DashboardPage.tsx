@@ -174,20 +174,30 @@ export function DashboardPage() {
           + Add
         </Link>
       </div>
-      <div className="rounded-xl bg-green-900 p-4 text-white">
-        <p className="text-sm text-green-100">Left to pay on current statements</p>
-        <p className="mt-1 text-3xl font-semibold">{formatPeso(dues.totalRemainingDue)}</p>
-        <p className="mt-2 text-sm text-green-100">Next bills (est.): {formatPeso(nextTotal)}</p>
-        <p className="text-sm text-green-100">Installments left: {formatPeso(dues.totalInstallmentsRemaining)}</p>
+      {/* Phones: one column in this order. Wide screens: summary, savings, accounts left; cards right. */}
+      <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-6 lg:space-y-0">
+        <div className="space-y-4">
+          <div className="rounded-xl bg-green-900 p-4 text-white">
+            <p className="text-sm text-green-100">Left to pay on current statements</p>
+            <p className="mt-1 text-3xl font-semibold">{formatPeso(dues.totalRemainingDue)}</p>
+            <p className="mt-2 text-sm text-green-100">Next bills (est.): {formatPeso(nextTotal)}</p>
+            <p className="text-sm text-green-100">Installments left: {formatPeso(dues.totalInstallmentsRemaining)}</p>
+          </div>
+          <SavingsCard workbook={workbook} month={today.slice(0, 7)} />
+          <div className="hidden lg:block">
+            <BalancesCard workbook={workbook} />
+          </div>
+        </div>
+        <ul className="space-y-3 lg:space-y-4">
+          {dues.cards.map((c, i) => {
+            const r = reconcileCard(workbook, c.card.cardId)
+            return <CardRow key={c.card.cardId} c={c} next={estimates[i]} toCheck={r.probable.length + r.unlogged.length + r.notOnStatement.length} />
+          })}
+        </ul>
+        <div className="lg:hidden">
+          <BalancesCard workbook={workbook} />
+        </div>
       </div>
-      <SavingsCard workbook={workbook} month={today.slice(0, 7)} />
-      <ul className="space-y-3">
-        {dues.cards.map((c, i) => {
-          const r = reconcileCard(workbook, c.card.cardId)
-          return <CardRow key={c.card.cardId} c={c} next={estimates[i]} toCheck={r.probable.length + r.unlogged.length + r.notOnStatement.length} />
-        })}
-      </ul>
-      <BalancesCard workbook={workbook} />
     </section>
   )
 }

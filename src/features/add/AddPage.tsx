@@ -45,7 +45,7 @@ export function AddPage() {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="max-w-xl space-y-5">
       <h1 className="text-2xl font-semibold text-slate-900">Add</h1>
       <Chips label="What" options={[...kinds]} value={kind} onChange={(v) => setParams({ type: v }, { replace: true })} />
       {/* key: reset the form when the type changes */}
