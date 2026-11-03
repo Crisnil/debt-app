@@ -69,7 +69,7 @@ export function ReconcilePage() {
   }
 
   return (
-    <section className="space-y-4">
+    <section className="max-w-2xl space-y-4">
       <Link to="/" className="text-sm text-green-900 underline">
         ← Home
       </Link>
