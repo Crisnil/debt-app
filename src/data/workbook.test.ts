@@ -7,7 +7,7 @@ describe('parseWorkbook', () => {
   const wb = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
   it('reads settings and cards', () => {
-    expect(wb.settings.salary_per_payday).toBe('20000')
+    expect(wb.settings.savings_goal_monthly).toEqual({ value: '500', row: 4 })
     expect(wb.cards.map((c) => [c.cardId, c.active])).toEqual([
       ['alpha', true],
       ['beta', true],
@@ -38,7 +38,22 @@ describe('parseWorkbook', () => {
 
   it('reports missing headers', () => {
     const values = { ...fixtureValues, Payments: [['date', 'card']] }
-    expect(() => parseWorkbook('Sample', fixtureTabs, values)).toThrow('Tab "Payments" is missing column(s): card_id, amount.')
+    expect(() => parseWorkbook('Sample', fixtureTabs, values)).toThrow('Tab "Payments" is missing column(s): pay_id, card_id, amount, from_account.')
+  })
+
+  it('reads accounts, transfers, income, and row numbers', () => {
+    expect(wb.accounts.find((a) => a.accountId === 'piggy')).toMatchObject({ isSavings: true, openingBalance: 500000, row: 3 })
+    expect(wb.accounts.find((a) => a.accountId === 'alpha')?.type).toBe('credit_card')
+    expect(wb.transfers).toHaveLength(3)
+    expect(wb.incomeSources[0]).toMatchObject({ sourceId: 'salary', amount: 2000000, days: [14, 28], frequency: 'per_payday', row: 2 })
+    expect(wb.incomeLog[0].type).toBe('salary')
+    expect(wb.payments[0]).toMatchObject({ payId: 'p1', fromAccount: 'payroll' })
+    expect(wb.lines.find((l) => l.description === 'SAMPLE GROCER')?.row).toBe(4)
+    expect(wb.headers['CC Alpha']).toContain('txn_id')
+  })
+
+  it('accepts a statement tab without the optional txn_id column', () => {
+    expect(wb.lines.find((l) => l.cardId === 'beta')?.linkedTxnId).toBe('')
   })
 
   it('reports a missing card statement tab', () => {

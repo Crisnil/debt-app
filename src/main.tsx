@@ -4,7 +4,10 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { listenForInstallPrompt } from './pwa/install.ts'
 import { SessionProvider } from './state/session.tsx'
+
+listenForInstallPrompt()
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: true } } })
 

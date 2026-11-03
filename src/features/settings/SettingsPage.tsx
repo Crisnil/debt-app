@@ -5,6 +5,7 @@ import { useSession, useWorkbook } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
+import { InstallCard, MoneySettings } from './MoneySettings'
 
 export function SettingsPage() {
   const { signedIn, sheet, signIn, signOut, chooseSheet, forgetSheet } = useSession()
@@ -92,6 +93,11 @@ export function SettingsPage() {
               ))}
             </ul>
           )}
+          {workbook.error instanceof SchemaError && (
+            <p className="mt-2 text-sm text-slate-600">
+              The sheet may use an older layout. Import the latest template file (File → Import → Replace spreadsheet), then reload.
+            </p>
+          )}
           {workbook.error && !(workbook.error instanceof SchemaError) && <ErrorNote message={workbook.error.message} />}
           {workbook.data && (
             <ul className="mt-2 space-y-1 text-sm text-slate-700">
@@ -100,10 +106,15 @@ export function SettingsPage() {
               <li>✓ {workbook.data.snapshots.length} card updates</li>
               <li>✓ {workbook.data.payments.length} payments</li>
               <li>✓ {workbook.data.transactions.length} expenses</li>
+              <li>✓ {workbook.data.transfers.length} money moves</li>
+              <li>✓ {workbook.data.incomeLog.length} income entries</li>
             </ul>
           )}
         </div>
       )}
+
+      {sheet && signedIn && workbook.data && <MoneySettings workbook={workbook.data} />}
+      <InstallCard />
     </section>
   )
 }

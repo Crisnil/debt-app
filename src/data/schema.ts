@@ -1,17 +1,22 @@
-/** Tabs and headers the app needs. Must match the sheet template (schema_version 1). */
-export const SCHEMA_VERSION = 1
+/** Tabs and headers the app needs. Must match the sheet template (schema_version 2). */
+export const SCHEMA_VERSION = 2
 
 export const TABS = {
   Settings: ['key', 'value'],
   Cards: ['card_id', 'bank', 'name', 'sheet_tab', 'statement_day', 'due_day', 'monthly_rate', 'status'],
   CardSnapshots: ['card_id', 'as_of', 'due_date', 'outstanding_balance', 'current_due', 'minimum_due', 'interest_charged'],
-  Payments: ['date', 'card_id', 'amount'],
-  PaymentMethods: ['method_id', 'label', 'type', 'active'],
+  Payments: ['pay_id', 'date', 'card_id', 'amount', 'from_account'],
+  Accounts: ['account_id', 'label', 'type', 'card_id', 'opening_balance', 'opening_date', 'is_savings', 'active'],
+  Transfers: ['transfer_id', 'created_at', 'date', 'from_account', 'to_account', 'amount', 'note'],
+  Income: ['source_id', 'label', 'amount', 'frequency', 'days', 'to_account', 'in_plan', 'active'],
+  IncomeLog: ['income_id', 'created_at', 'date', 'source_id', 'type', 'amount', 'to_account', 'note'],
   Categories: ['category', 'weekly_budget', 'default_method'],
-  Transactions: ['txn_id', 'date', 'amount', 'merchant', 'category', 'method_id'],
+  Transactions: ['txn_id', 'created_at', 'date', 'amount', 'merchant', 'category', 'method_id', 'note', 'source'],
 } as const
 
-/** Headers for each card's statement tab (named in Cards.sheet_tab). */
+export type TabName = keyof typeof TABS
+
+/** Headers for each card's statement tab (named in Cards.sheet_tab). txn_id is optional. */
 export const STATEMENT_TAB_HEADERS = [
   'statement_date',
   'post_date',

@@ -1,16 +1,18 @@
 import type { CellValue } from '../google/sheetsApi'
 import { toCentavos, type Centavos } from '../lib/money'
 
-export type Row = Record<string, CellValue | undefined>
+export type Row = Record<string, CellValue | undefined> & { __row: number }
 
-/** Turns a tab (header row + data rows) into objects keyed by header. Skips empty rows. */
+/** Turns a tab (header row + data rows) into objects keyed by header. Skips empty rows. __row is the 1-based sheet row. */
 export function rowsToObjects(values: CellValue[][]): Row[] {
   const [header, ...rows] = values
   if (!header) return []
   const keys = header.map((h) => String(h).trim())
-  return rows
-    .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined))
-    .map((row) => Object.fromEntries(keys.map((key, i) => [key, row[i]])))
+  return rows.flatMap((row, i) =>
+    row.some((cell) => cell !== '' && cell !== null && cell !== undefined)
+      ? [{ ...Object.fromEntries(keys.map((key, k) => [key, row[k]])), __row: i + 2 } as Row]
+      : [],
+  )
 }
 
 export function text(value: CellValue | undefined): string {
@@ -38,6 +40,14 @@ export function num(value: CellValue | undefined): number | null {
 
 export function bool(value: CellValue | undefined): boolean {
   return value === true || text(value).toUpperCase() === 'TRUE'
+}
+
+/** "14,28" -> [14, 28] */
+export function dayList(value: CellValue | undefined): number[] {
+  return text(value)
+    .split(/[,\s]+/)
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 1 && d <= 31)
 }
 
 /**
