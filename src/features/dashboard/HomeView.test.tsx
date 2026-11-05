@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
+import { readOutbox } from '../../data/outbox'
 import { parseWorkbook } from '../../data/workbook'
 import type { Workbook } from '../../domain/types'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
@@ -12,7 +13,7 @@ const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 function renderHome(workbook: Workbook = base, today = '2030-01-21') {
   return render(
     <MemoryRouter>
-      <HomeView workbook={workbook} today={today} />
+      <HomeView sheetId="s" workbook={workbook} today={today} />
     </MemoryRouter>,
   )
 }
@@ -38,6 +39,21 @@ describe('Home', () => {
   it('says so when savings are more than what we owe', () => {
     renderHome({ ...base, accounts: base.accounts.map((a) => (a.accountId === 'piggy' ? { ...a, openingBalance: 5000000 } : a)) })
     expect(screen.getByText('✓ Savings are more than what we owe')).toBeInTheDocument()
+  })
+
+  it('reminds about a payday that is not recorded and records it in one tap', async () => {
+    localStorage.clear()
+    renderHome(base, '2030-01-29')
+    expect(screen.getByText(/Not recorded yet/)).toHaveTextContent('▲ Not recorded yet: Salary ₱20,000.00 → Payroll (Jan 28)')
+    await userEvent.click(screen.getByRole('button', { name: 'Record' }))
+    expect(readOutbox('s').at(-1)?.record).toMatchObject({ date: '2030-01-28', source_id: 'salary', type: 'salary', amount: 20000, to_account: 'payroll' })
+  })
+
+  it('shows what we have, with savings and spendable now', () => {
+    renderHome()
+    expect(screen.getByRole('heading', { name: 'What we have' })).toBeInTheDocument()
+    expect(screen.getByText(/Spendable now/)).toBeInTheDocument()
+    expect(screen.getByText('Piggy Bank · savings')).toBeInTheDocument()
   })
 
   it('shows what we owe, the next due item, and this month', () => {

@@ -1,7 +1,9 @@
 import { useState, useSyncExternalStore } from 'react'
-import { addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
+import { addAccount, addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
-import { moneyAccounts } from '../../domain/accounts'
+import { accountLabel, moneyAccounts } from '../../domain/accounts'
+import { incomeByMonth } from '../../domain/payday'
+import { monthLabel } from '../../ui/charts/palette'
 import { accountBalances } from '../../domain/balances'
 import { todayIso } from '../../domain/dues'
 import type { Account, Card, IncomeSource, Workbook } from '../../domain/types'
@@ -127,15 +129,20 @@ function NewIncomeSource({ workbook }: { workbook: Workbook }) {
   )
 }
 
-function AccountRow({ account, balance }: { account: Account; balance: number | undefined }) {
+const pesoCents = (text: string) => (text.trim() === '' ? 0 : Math.round(Number(text.replace(/,/g, '')) * 100))
+
+function AccountRow({ account, balance, canMaintain }: { account: Account; balance: number | undefined; canMaintain: boolean }) {
   const edit = useSheetEdit()
   const [amount, setAmount] = useState(toPesos(account.openingBalance).toFixed(2))
   const [date, setDate] = useState(account.openingDate || todayIso())
+  const [maintaining, setMaintaining] = useState(account.maintainingBalance ? toPesos(account.maintainingBalance).toFixed(2) : '')
 
   function save() {
-    const cents = Math.round(Number(amount.replace(/,/g, '')) * 100)
+    const cents = pesoCents(amount)
+    const keep = pesoCents(maintaining)
     if (amount.trim() === '' || !Number.isFinite(cents)) return edit.fail('Enter a valid amount.')
-    void edit.run(`Saved ${account.label}.`, (sheetId, wb, token) => saveAccountOpening(sheetId, wb, account.row, cents, date, token))
+    if (!Number.isFinite(keep) || keep < 0) return edit.fail('Enter a valid maintaining balance, or leave it empty.')
+    void edit.run(`Saved ${account.label}.`, (sheetId, wb, token) => saveAccountOpening(sheetId, wb, account.row, cents, date, token, canMaintain ? keep : undefined))
   }
 
   return (
@@ -152,6 +159,11 @@ function AccountRow({ account, balance }: { account: Account; balance: number | 
           <TextInput id={`accd-${account.accountId}`} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
       </div>
+      {canMaintain && account.type === 'bank' && (
+        <Field label="Maintaining balance (₱)" htmlFor={`accm-${account.accountId}`} hint="Required by the bank; not counted as spendable. Empty = none.">
+          <TextInput id={`accm-${account.accountId}`} inputMode="decimal" value={maintaining} onChange={(e) => setMaintaining(e.target.value)} />
+        </Field>
+      )}
       <Button variant="secondary" disabled={edit.busy} onClick={save}>
         Save
       </Button>
@@ -225,6 +237,101 @@ function YourName({ workbook }: { workbook: Workbook }) {
       <ErrorNote message={edit.error} />
       <SuccessNote message={edit.done} />
     </div>
+  )
+}
+
+function NewAccountForm({ workbook }: { workbook: Workbook }) {
+  const edit = useSheetEdit()
+  const [label, setLabel] = useState('')
+  const [type, setType] = useState<'bank' | 'cash' | 'e-wallet'>('bank')
+  const [isSavings, setIsSavings] = useState(false)
+  const [opening, setOpening] = useState('')
+  const [date, setDate] = useState(todayIso())
+  const [maintaining, setMaintaining] = useState('')
+
+  function add() {
+    const cents = pesoCents(opening)
+    const keep = pesoCents(maintaining)
+    if (!label.trim()) return edit.fail('Enter a name, for example "BPI Savings".')
+    if (!Number.isFinite(cents) || !Number.isFinite(keep) || keep < 0) return edit.fail('Enter valid amounts.')
+    if (workbook.accounts.some((a) => a.label.toLowerCase() === label.trim().toLowerCase())) return edit.fail('This name is already used.')
+    void edit.run(`Added ${label.trim()}.`, (sheetId, wb, token) =>
+      addAccount(sheetId, wb, { label: label.trim(), type, isSavings, openingBalance: cents, openingDate: date, maintainingBalance: type === 'bank' ? keep : 0 }, token),
+    )
+  }
+
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm text-green-900">+ Add account</summary>
+      <div className="mt-3 space-y-2">
+        <Field label="Name" htmlFor="new-acc-label" hint="An alias only, never the account number.">
+          <TextInput id="new-acc-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. BPI Savings" />
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Type" htmlFor="new-acc-type">
+            <Select id="new-acc-type" value={type} onChange={(e) => setType(e.target.value as 'bank' | 'cash' | 'e-wallet')}>
+              <option value="bank">Bank</option>
+              <option value="cash">Cash</option>
+              <option value="e-wallet">E-wallet</option>
+            </Select>
+          </Field>
+          <label className="mt-6 flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={isSavings} onChange={(e) => setIsSavings(e.target.checked)} /> Savings account
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Balance now (₱)" htmlFor="new-acc-opening">
+            <TextInput id="new-acc-opening" inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" />
+          </Field>
+          <Field label="As of" htmlFor="new-acc-date">
+            <TextInput id="new-acc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </Field>
+        </div>
+        {type === 'bank' && (
+          <Field label="Maintaining balance (₱, optional)" htmlFor="new-acc-keep">
+            <TextInput id="new-acc-keep" inputMode="decimal" value={maintaining} onChange={(e) => setMaintaining(e.target.value)} />
+          </Field>
+        )}
+        <Button variant="secondary" disabled={edit.busy} onClick={add}>
+          {edit.busy ? 'Adding…' : 'Add account'}
+        </Button>
+        <ErrorNote message={edit.error} />
+        <SuccessNote message={edit.done} />
+      </div>
+    </details>
+  )
+}
+
+/** Income received, by month: salary, allowance, and money received, with the month total against the plan. */
+function IncomeReceived({ workbook, monthlyPlan }: { workbook: Workbook; monthlyPlan: number }) {
+  const months = incomeByMonth(workbook, 3, todayIso())
+  if (months.every((m) => m.entries.length === 0)) return <p className="mt-3 text-sm text-slate-500">No income recorded yet. Home reminds you on each payday.</p>
+  const label = (e: (typeof months)[number]['entries'][number]) =>
+    workbook.incomeSources.find((s) => s.sourceId === e.sourceId)?.label ?? (e.note || e.type.replace('_', ' '))
+  return (
+    <details className="mt-3" open>
+      <summary className="cursor-pointer text-sm font-medium text-slate-900">Received</summary>
+      {months.map((m) => (
+        <div key={m.month} className="mt-2 text-sm">
+          <p className="flex justify-between border-b border-slate-100 pb-1 text-slate-600">
+            <span>{monthLabel(m.month)}</span>
+            <span>
+              <b className="text-slate-900">{formatPeso(m.total)}</b> of {formatPeso(monthlyPlan)} plan
+            </span>
+          </p>
+          <ul className="mt-1 space-y-0.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {m.entries.map((e) => (
+              <li key={e.incomeId} className="flex justify-between gap-2 text-slate-700">
+                <span className="truncate">
+                  {e.date.slice(5)} · {label(e)} → {accountLabel(workbook, e.toAccount)}
+                </span>
+                <span>{formatPeso(e.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </details>
   )
 }
 
@@ -302,7 +409,7 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
       <div className={card}>
         <h2 className="font-medium text-slate-900">Income</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Recurring income in the plan: <b>{formatPeso(monthlyPlan)}</b> per month. Record each payday in <b>Add → Other entries → Income</b>.
+          Recurring income in the plan: <b>{formatPeso(monthlyPlan)}</b> per month. Home reminds you to record each payday.
         </p>
         <ul className="mt-3 space-y-3">
           {workbook.incomeSources.map((s) => (
@@ -310,15 +417,17 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
           ))}
         </ul>
         <NewIncomeSource workbook={workbook} />
+        <IncomeReceived workbook={workbook} monthlyPlan={monthlyPlan} />
       </div>
       <div className={card}>
         <h2 className="font-medium text-slate-900">Accounts</h2>
         <p className="mt-1 text-sm text-slate-600">Balances count entries after the "as of" date. Use aliases only, never account numbers.</p>
         <ul className="mt-3 space-y-3">
           {accounts.map((a) => (
-            <AccountRow key={a.accountId} account={a} balance={balances.get(a.accountId)} />
+            <AccountRow key={a.accountId} account={a} balance={balances.get(a.accountId)} canMaintain={(workbook.headers.Accounts ?? []).includes('maintaining_balance')} />
           ))}
         </ul>
+        <NewAccountForm workbook={workbook} />
       </div>
       <CreditLimits workbook={workbook} />
       <SavingsGoal workbook={workbook} />

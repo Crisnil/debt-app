@@ -63,6 +63,8 @@ export type Account = {
   openingDate: IsoDate
   isSavings: boolean
   active: boolean
+  /** Amount the bank requires to stay in the account (not spendable). 0 when none. */
+  maintainingBalance: Centavos
   row: number
 }
 

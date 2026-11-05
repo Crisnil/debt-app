@@ -14,6 +14,7 @@ import { Donut } from '../../ui/charts/Donut'
 import { monthLabel, seriesColor, STATUS } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
+import { PaydayReminders, WhatWeHave } from './MoneyCards'
 
 /** Days ahead that alerts and "Next due" look at. */
 const DUE_SOON_DAYS = 7
@@ -290,11 +291,11 @@ export function DashboardPage() {
   }
   if (!workbook) return <p className="text-slate-600">Reading your sheet…</p>
 
-  return <HomeView workbook={workbook} today={todayIso()} />
+  return <HomeView sheetId={sheet.id} workbook={workbook} today={todayIso()} />
 }
 
 /** The Home page body for a loaded workbook. */
-export function HomeView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
+export function HomeView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: IsoDate }) {
   const forecasts = forecastCards(workbook, today)
   const owed = owedParts(workbook, forecasts, today)
   const name = workbook.settings.display_name?.value
@@ -312,9 +313,13 @@ export function HomeView({ workbook, today }: { workbook: Workbook; today: IsoDa
           </Link>
         </div>
       </div>
+      <PaydayReminders sheetId={sheetId} workbook={workbook} today={today} />
       <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
-      <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
+        <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
+        <WhatWeHave workbook={workbook} />
+      </div>
       <Tiles workbook={workbook} forecasts={forecasts} today={today} />
       <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
     </section>

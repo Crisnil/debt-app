@@ -310,14 +310,49 @@ export async function saveCreditLimit(sheetId: string, wb: Workbook, row: number
   await updateCells(sheetId, [{ range: cellRange('Cards', h, 'credit_limit', row), values: [[pesos(limit)]] }], token)
 }
 
-export async function saveAccountOpening(sheetId: string, wb: Workbook, row: number, openingBalance: Centavos, openingDate: IsoDate, token: string) {
+export async function saveAccountOpening(
+  sheetId: string,
+  wb: Workbook,
+  row: number,
+  openingBalance: Centavos,
+  openingDate: IsoDate,
+  token: string,
+  maintainingBalance?: Centavos,
+) {
   const h = wb.headers.Accounts
-  await updateCells(
-    sheetId,
-    [
-      { range: cellRange('Accounts', h, 'opening_balance', row), values: [[pesos(openingBalance)]] },
-      { range: cellRange('Accounts', h, 'opening_date', row), values: [[openingDate]] },
-    ],
-    token,
-  )
+  const updates = [
+    { range: cellRange('Accounts', h, 'opening_balance', row), values: [[pesos(openingBalance)]] },
+    { range: cellRange('Accounts', h, 'opening_date', row), values: [[openingDate]] },
+  ]
+  if (maintainingBalance !== undefined && h.includes('maintaining_balance')) {
+    updates.push({ range: cellRange('Accounts', h, 'maintaining_balance', row), values: [[pesos(maintainingBalance)]] })
+  }
+  await updateCells(sheetId, updates, token)
+}
+
+export type NewAccount = { label: string; type: 'bank' | 'cash' | 'e-wallet'; isSavings: boolean; openingBalance: Centavos; openingDate: IsoDate; maintainingBalance: Centavos }
+
+/** An id from the name that is not used yet: "BPI Savings" -> "bpi-savings" (or "bpi-savings-2"). */
+export function newAccountId(wb: Pick<Workbook, 'accounts' | 'cards'>, label: string): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'account'
+  const used = new Set([...wb.accounts.map((a) => a.accountId), ...wb.cards.map((c) => c.cardId)])
+  let id = base
+  for (let n = 2; used.has(id); n++) id = `${base}-${n}`
+  return id
+}
+
+/** Adds an account (bank, cash, or e-wallet) as a new row of the Accounts tab. */
+export async function addAccount(sheetId: string, wb: Workbook, account: NewAccount, token: string) {
+  const row = toRow(wb.headers.Accounts, {
+    account_id: newAccountId(wb, account.label),
+    label: account.label,
+    type: account.type,
+    card_id: '',
+    opening_balance: pesos(account.openingBalance),
+    opening_date: account.openingDate,
+    is_savings: account.isSavings,
+    active: true,
+    maintaining_balance: account.maintainingBalance ? pesos(account.maintainingBalance) : '',
+  })
+  await appendRows(sheetId, 'Accounts', [row], token)
 }
