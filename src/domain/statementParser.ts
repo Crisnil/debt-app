@@ -11,7 +11,7 @@ export type ParsedLine = {
   totalTerms: number | null
 }
 
-export type BankFormat = 'metrobank' | 'security' | 'auto'
+export type BankFormat = 'metrobank' | 'security' | 'bpi' | 'auto'
 
 /** MM/DD with no year: use the statement year, or the year before when the month is after the statement month. */
 function withYear(md: string, statementDate: IsoDate): IsoDate {
@@ -52,17 +52,32 @@ function build(post: IsoDate, txn: IsoDate, desc: string, n: string | undefined,
 const METROBANK = /^(\d{2}\/\d{2})\s+(\d{2}\/\d{2})\s+(?:INSTL\s+(\d+)\/(\d+)\s+)?(.+?)\s+([\d,]+\.\d{2})\s*(C|CR)?$/i
 // Security Bank: "<purchase MM/DD/YY> <post MM/DD/YY> <description> [n/m] <amount>[ CR]"
 const SECURITY = /^(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+(.+?)(?:\s+(\d+)\/(\d+))?\s+([\d,]+\.\d{2})\s*(CR|C)?$/i
+// BPI: "<purchase Month D> <post Month D> <description> [nn/mm] <amount>", no year. Credits have a leading minus (or CR).
+const MONTH_NAME = String.raw`([A-Za-z]{3,9})\.?`
+const BPI = new RegExp(String.raw`^${MONTH_NAME}\s+(\d{1,2})\s+${MONTH_NAME}\s+(\d{1,2})\s+(.+?)(?:\s+(\d{1,2})\/(\d{1,2}))?\s+(-)?([\d,]+\.\d{2})\s*(CR)?$`, 'i')
+
+/** "October", "5" with no year: the statement year, or the year before when the month is after the statement month. */
+function monthDayWithYear(monthName: string, day: string, statementDate: IsoDate): IsoDate | null {
+  const m = MONTHS.indexOf(monthName.slice(0, 3).toLowerCase()) + 1
+  return m ? withYear(`${m}/${day}`, statementDate) : null
+}
 
 /** Reads one pasted statement line. Returns null when the format is not known; the user then fills the form. */
 export function parseStatementLine(raw: string, format: BankFormat, statementDate: IsoDate): ParsedLine | null {
   const line = raw.trim().replace(/\s+/g, ' ')
-  if (format !== 'security') {
+  if (format === 'metrobank' || format === 'auto') {
     const m = line.match(METROBANK)
     if (m) return build(withYear(m[1], statementDate), withYear(m[2], statementDate), m[5], m[3], m[4], m[6], Boolean(m[7]))
   }
-  if (format !== 'metrobank') {
+  if (format === 'security' || format === 'auto') {
     const m = line.match(SECURITY)
     if (m) return build(fromMdy(m[2]), fromMdy(m[1]), m[3], m[4], m[5], m[6], Boolean(m[7]))
+  }
+  if (format === 'bpi' || format === 'auto') {
+    const m = line.match(BPI)
+    const txn = m && monthDayWithYear(m[1], m[2], statementDate)
+    const post = m && monthDayWithYear(m[3], m[4], statementDate)
+    if (m && txn && post) return build(post, txn, m[5].replace(/[\s:]+$/, ''), m[6], m[7], m[9], Boolean(m[8] || m[10]))
   }
   return null
 }
@@ -70,6 +85,7 @@ export function parseStatementLine(raw: string, format: BankFormat, statementDat
 export function formatForBank(bank: string): BankFormat {
   if (/metro/i.test(bank)) return 'metrobank'
   if (/security/i.test(bank)) return 'security'
+  if (/bpi|bank of the philippine/i.test(bank)) return 'bpi'
   return 'auto'
 }
 
