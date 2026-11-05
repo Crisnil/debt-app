@@ -1,121 +1,249 @@
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { daysBetween, summarizeDues, todayIso } from '../../domain/dues'
-import { forecastCards, type CardForecast } from '../../domain/forecast'
+import { daysBetween, todayIso } from '../../domain/dues'
+import { forecastCards, PAYABLES } from '../../domain/forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
-import { addMonths, payableMonths } from '../../domain/payables'
+import { carriedAlerts, dueItems, lastInstallment, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useLiveWorkbook, useSession } from '../../state/hooks'
 import { Button } from '../../ui/Button'
-import { Gauge } from '../../ui/charts/Gauge'
-import { monthLabel } from '../../ui/charts/palette'
+import { DebtSavingsBar } from '../../ui/charts/DebtSavingsBar'
+import { Donut } from '../../ui/charts/Donut'
+import { monthLabel, seriesColor, STATUS } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 
-/** Days ahead that the "due soon" alert looks at. */
+/** Days ahead that alerts and "Next due" look at. */
 const DUE_SOON_DAYS = 7
+
+const panel = 'rounded-xl bg-white p-4 shadow-sm'
 
 const DEBT_WORD: Record<Health, string> = { good: 'Good', watch: 'Watch', careful: 'Careful', bad: 'Buried in debt' }
 const SAVINGS_WORD: Record<Health, string> = { good: 'On target', watch: 'Halfway', careful: 'Behind', bad: 'Far behind' }
 const SPENDING_WORD: Record<Health, string> = { good: 'On track', watch: 'Watch', careful: 'Over pace', bad: 'Overspending' }
 
-type DueItem = { key: string; name: string; detail: string; amount: number; dueDate: IsoDate; to: string }
-
-function cardDueItems(workbook: Workbook, forecasts: CardForecast[], today: IsoDate): DueItem[] {
-  const items: DueItem[] = []
-  for (const f of forecasts) {
-    for (const b of f.bills) {
-      if (b.total <= 0 || daysBetween(today, b.bill.dueDate) > DUE_SOON_DAYS) continue
-      items.push({
-        key: `${f.card.cardId}-${b.bill.statementDate}`,
-        name: f.card.name,
-        detail: b.statementLeft ? 'left on the statement' : b.fromStatement ? 'statement lines in, total not final' : 'estimate',
-        amount: b.total,
-        dueDate: b.bill.dueDate,
-        to: `/cards/${f.card.cardId}?tab=pay`,
-      })
-    }
-  }
-  // Late: the latest statement is past due and not fully paid.
-  for (const c of summarizeDues(workbook, today).cards) {
-    if (c.status === 'overdue' && c.snapshot) {
-      items.push({ key: `${c.card.cardId}-late`, name: c.card.name, detail: 'left on the statement', amount: c.remainingDue, dueDate: c.snapshot.dueDate, to: `/cards/${c.card.cardId}?tab=pay` })
-    }
-  }
-  return items
-}
-
-function payableDueItems(workbook: Workbook, today: IsoDate): DueItem[] {
-  return payableMonths(workbook, addMonths(today.slice(0, 7), 1))
-    .filter((m) => m.left > 0 && daysBetween(today, m.dueDate) <= DUE_SOON_DAYS)
-    .map((m) => ({
-      key: `${m.payable.payableId}-${m.month}`,
-      name: m.payable.name,
-      detail: m.paid > 0 ? `${formatPeso(m.paid)} paid` : m.payable.payee || m.payable.category,
-      amount: m.left,
-      dueDate: m.dueDate,
-      to: '/bills',
-    }))
-}
-
-/** One line, only when something is late or due soon. Details are on Cards and Bills. */
-function DueAlert({ items, today }: { items: DueItem[]; today: IsoDate }) {
-  if (items.length === 0) return null
-  const late = items.filter((i) => i.dueDate < today)
-  const soon = items.filter((i) => i.dueDate >= today)
-  const names = [...new Set(items.map((i) => i.name))].join(', ')
-  const to = items.every((i) => i.to.startsWith('/cards')) ? '/cards' : items.every((i) => i.to === '/bills') ? '/bills' : '/cards'
+/** Status word with its icon on the status color. Text is dark so it stays readable on every status color. */
+function Badge({ health, word }: { health: Health; word: string }) {
+  const s = STATUS[health]
   return (
-    <Link to={to} className={`block rounded-xl p-3 text-sm ${late.length ? 'bg-red-50 text-red-900' : 'bg-amber-50 text-amber-900'}`}>
-      {late.length > 0 && <b>▲ {late.length} late</b>}
-      {late.length > 0 && soon.length > 0 && ' · '}
-      {soon.length > 0 && <b>{soon.length} due in {DUE_SOON_DAYS} days</b>}: {names} →
-    </Link>
+    <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-slate-900" style={{ background: s.track, boxShadow: `inset 0 0 0 1px ${s.fill}` }}>
+      {s.icon} {word}
+    </span>
   )
 }
 
-/** "▲ vs Oct": higher or lower than last month. Amounts are on the other pages. */
-const trendText = (now: number, before: number, month: string) => {
-  if (before === 0 && now === 0) return undefined
-  const arrow = now > before ? '▲ more' : now < before ? '▼ less' : '= same'
-  return `${arrow} than ${monthLabel(month, false)}`
+function SectionHead({ title, to, link }: { title: string; to?: string; link?: string }) {
+  return (
+    <div className="mb-3 flex items-baseline justify-between">
+      <h2 className="font-medium text-slate-900">{title}</h2>
+      {to && (
+        <Link to={to} className="text-sm text-green-900 underline">
+          {link}
+        </Link>
+      )}
+    </div>
+  )
 }
 
-function HealthGauges({ workbook, forecasts, today }: { workbook: Workbook; forecasts: CardForecast[]; today: IsoDate }) {
-  const debt = debtGauge(forecasts)
-  const savings = savingsGauge(workbook, today)
-  const spending = spendingGauge(workbook, today)
-  const last = addMonths(today.slice(0, 7), -1)
-  const debtH = debt.used === null ? null : debtHealth(debt.used)
-  const savingsH = savings.ratio === null ? null : savingsHealth(savings.ratio)
-  const spendingH = spending.ratio === null ? null : spendingHealth(spending.ratio)
+function Progress({ workbook, owed, today, last }: { workbook: Workbook; owed: ReturnType<typeof owedParts>; today: IsoDate; last: ReturnType<typeof lastInstallment> }) {
+  const [open, setOpen] = useState(false)
+  const savings = savingsParts(workbook)
+  const owedTotal = owed.reduce((s, p) => s + p.amount, 0)
+  const savedTotal = savings.reduce((s, p) => s + p.amount, 0)
+  const cover = owedTotal > 0 ? Math.round((savedTotal / owedTotal) * 100) : 100
   return (
-    <div className="grid grid-cols-3 gap-2 lg:gap-4">
-      <Gauge
-        label="Debt used"
-        ratio={debt.used}
-        health={debtH}
-        word={debtH ? DEBT_WORD[debtH] : 'Add limits'}
-        detail={debt.used === null ? 'Set credit limits in Settings' : `of card limits`}
-        to={debt.used === null ? '/settings' : '/cards'}
-      />
-      <Gauge
-        label="Savings"
-        ratio={savings.ratio}
-        health={savingsH}
-        word={savingsH ? SAVINGS_WORD[savingsH] : 'Set a goal'}
-        detail={savings.ratio === null ? 'Set a goal in Settings' : 'of this month’s goal'}
-        trend={trendText(savings.saved, savings.lastMonth, last)}
-        to="/add/other?type=save"
-      />
-      <Gauge
-        label="Spending"
-        ratio={spending.ratio}
-        health={spendingH}
-        word={spendingH ? SPENDING_WORD[spendingH] : 'No budget'}
-        detail={spending.ratio === null ? 'Set weekly budgets in Categories' : `of ${spending.basis === 'budget' ? 'budget' : 'income'} so far`}
-        trend={trendText(spending.spent, spending.lastMonth, last)}
-      />
+    <div className={panel}>
+      <SectionHead title="Debt vs savings" to="/settings" link="Edit" />
+      <DebtSavingsBar owed={owedTotal} saved={savedTotal} />
+      <p className="mt-2 flex flex-wrap justify-between gap-x-4 text-xs text-slate-600">
+        <span>{savedTotal >= owedTotal && owedTotal > 0 ? '✓ Savings are more than what we owe' : `Savings cover ${cover}% of what we owe`}</span>
+        {last && (
+          <span>
+            Last installment {monthLabel(last.month)} ({last.monthsLeft} months)
+          </span>
+        )}
+      </p>
+      <button type="button" className="mt-2 text-sm text-green-900" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? '▾ Hide details' : '▸ Show details'}
+      </button>
+      {open && (
+        <dl className="mt-2 grid grid-cols-2 gap-y-1 text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {owed.map((p) => (
+            <div key={p.id} className="contents">
+              <dt className="text-slate-500">Owed · {p.name}</dt>
+              <dd className="text-right text-slate-800">{formatPeso(p.amount)}</dd>
+            </div>
+          ))}
+          {savings.map((p) => (
+            <div key={p.id} className="contents">
+              <dt className="text-slate-500">Savings · {p.name}</dt>
+              <dd className="text-right text-slate-800">{formatPeso(p.amount)}</dd>
+            </div>
+          ))}
+          {savings.length === 0 && <dt className="col-span-2 text-slate-500">No savings account yet. Mark one with is_savings in the Accounts tab.</dt>}
+        </dl>
+      )}
+      <p className="sr-only">As of {today}</p>
+    </div>
+  )
+}
+
+function Alerts({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
+  const due = dueItems(workbook, forecasts, today, DUE_SOON_DAYS)
+  const late = due.filter((d) => d.dueDate < today)
+  const soon = due.filter((d) => d.dueDate >= today)
+  const carried = carriedAlerts(forecasts)
+  if (late.length === 0 && soon.length === 0 && carried.length === 0) return null
+  return (
+    <div className={`space-y-1 rounded-xl border p-3 text-sm ${late.length ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`} role="status">
+      {late.length > 0 && (
+        <p>
+          ▲ <b>{late.length} late:</b> {late.map((d) => d.name).join(', ')}
+        </p>
+      )}
+      {soon.length > 0 && (
+        <p>
+          ! <b>Due in {DUE_SOON_DAYS} days:</b> {soon.map((d) => `${d.name} (${d.dueDate.slice(5)})`).join(', ')}
+        </p>
+      )}
+      {carried.map((c) => (
+        <p key={c.cardId}>
+          ! <b>{c.name}:</b> {formatPeso(c.carried)} carried, about {formatPeso(c.interest)} interest on the {c.statementDate} bill.
+        </p>
+      ))}
+    </div>
+  )
+}
+
+function WhatWeOwe({ workbook, forecasts, owed }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; owed: ReturnType<typeof owedParts> }) {
+  // Same colors as the Plan chart: each card by its order in the Cards tab, payables in slot 4.
+  const color = (id: string) => (id === PAYABLES ? seriesColor(forecasts.length) : seriesColor(forecasts.findIndex((f) => f.card.cardId === id)))
+  const parts = owed.map((p) => ({ ...p, color: color(p.id) }))
+  const total = owed.reduce((s, p) => s + p.amount, 0)
+  const debt = debtGauge(forecasts)
+  const health = debt.used === null ? null : debtHealth(debt.used)
+  const biggest = owed.reduce<(typeof owed)[number] | null>((b, p) => (b === null || p.amount > b.amount ? p : b), null)
+  if (total === 0) return null
+  return (
+    <div className={panel}>
+      <SectionHead title="What we owe" to="/cards" link="Cards" />
+      <Donut parts={parts} centerLabel="owed">
+        <p className="mb-2 border-b border-slate-100 pb-2 text-sm text-slate-600">
+          Debt status:{' '}
+          {health ? (
+            <>
+              <Badge health={health} word={DEBT_WORD[health]} /> {Math.round(debt.used! * 100)}% of credit limits
+            </>
+          ) : (
+            <Link to="/settings" className="text-green-900 underline">
+              add credit limits
+            </Link>
+          )}
+        </p>
+      </Donut>
+      {biggest && (
+        <p className="mt-3 text-xs text-slate-500">
+          *{biggest.name} is {Math.round((biggest.amount / total) * 100)}% of what we owe. Includes installments not billed yet. {workbook.payables.length === 0 && 'Add bills on the Bills page.'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Tile({ label, children, to }: { label: string; children: ReactNode; to?: string }) {
+  const body = (
+    <>
+      <p className="text-xs text-slate-500">{label}</p>
+      {children}
+    </>
+  )
+  return to ? (
+    <Link to={to} className={`${panel} block active:bg-slate-50`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={panel}>{body}</div>
+  )
+}
+
+function Tiles({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
+  const next = dueItems(workbook, forecasts, today, 62).find((d) => d.dueDate >= today) ?? null
+  const month = thisMonth(workbook, forecasts, today)
+  const over = month.income > 0 ? Math.round(((month.bills - month.income) / month.income) * 100) : null
+  const drop = nextDrop(forecasts, today)
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <Tile label="Next due" to={next?.to}>
+        {next ? (
+          <>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{next.name}</p>
+            <p className="text-sm text-slate-600">
+              {next.dueDate} · {formatPeso(next.amount)}
+            </p>
+            <p className="text-xs text-slate-500">in {daysBetween(today, next.dueDate)} days</p>
+          </>
+        ) : (
+          <p className="mt-1 text-lg font-semibold text-slate-900">Nothing due ✓</p>
+        )}
+      </Tile>
+      <Tile label={`Bills due in ${monthLabel(month.month)}`} to="/plan">
+        <p className="mt-1 text-lg font-semibold text-slate-900">{formatPeso(month.bills)}</p>
+        {over !== null && <Badge health={over > 0 ? 'bad' : over > -10 ? 'watch' : 'good'} word={over > 0 ? `${over}% over income` : `${-over}% under income`} />}
+        <p className="mt-0.5 text-xs text-slate-500">Income {formatPeso(month.income)}</p>
+      </Tile>
+      <Tile label="Next drop in bills" to="/plan">
+        {drop ? (
+          <>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{monthLabel(drop.lastDue)}</p>
+            <p className="text-sm text-slate-600">−{formatPeso(drop.monthly)}/mo after</p>
+            <p className="truncate text-xs text-slate-500">{drop.plans.map((p) => p.description).join(', ')}</p>
+          </>
+        ) : (
+          <p className="mt-1 text-lg font-semibold text-slate-900">No installments</p>
+        )}
+      </Tile>
+    </div>
+  )
+}
+
+function Metric({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+      {children}
+    </div>
+  )
+}
+
+function ThisMonthRow({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
+  const month = thisMonth(workbook, forecasts, today)
+  const spending = spendingGauge(workbook, today)
+  const savings = savingsGauge(workbook, today)
+  const spendingH = spending.ratio === null ? null : spendingHealth(spending.ratio)
+  const savingsH = savings.ratio === null ? null : savingsHealth(savings.ratio)
+  return (
+    <div className={panel}>
+      <SectionHead title={`This month · ${monthLabel(month.month)}`} />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Metric label="Income (plan)" value={formatPeso(month.income)} />
+        <Metric label="Spent so far" value={formatPeso(spending.spent)}>
+          {spendingH && <Badge health={spendingH} word={SPENDING_WORD[spendingH]} />}
+          {spending.ratio !== null && (
+            <p className="mt-0.5 text-xs text-slate-500">
+              {Math.round(spending.ratio * 100)}% of {spending.basis === 'budget' ? 'budget' : 'income'} so far
+            </p>
+          )}
+        </Metric>
+        <Metric label="Saved" value={formatPeso(savings.saved)}>
+          {savingsH && <Badge health={savingsH} word={SAVINGS_WORD[savingsH]} />}
+          {savings.goal > 0 && <p className="mt-0.5 text-xs text-slate-500">of {formatPeso(savings.goal)} goal</p>}
+        </Metric>
+        <Metric label="Interest (est.)" value={formatPeso(month.interest)}>
+          <p className="text-xs text-slate-500">{month.interest > 0 ? 'on bills due this month' : 'none this month ✓'}</p>
+        </Metric>
+      </div>
     </div>
   )
 }
@@ -163,23 +291,33 @@ export function DashboardPage() {
   }
   if (!workbook) return <p className="text-slate-600">Reading your sheet…</p>
 
-  const today = todayIso()
+  return <HomeView workbook={workbook} today={todayIso()} />
+}
+
+/** The Home page body for a loaded workbook. */
+export function HomeView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
   const forecasts = forecastCards(workbook, today)
-  const due = [...cardDueItems(workbook, forecasts, today), ...payableDueItems(workbook, today)].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const owed = owedParts(workbook, forecasts, today)
+  const name = workbook.settings.display_name?.value
   return (
-    <section className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-      <p className="text-sm text-slate-600">How are we doing in {monthLabel(today.slice(0, 7))}?</p>
-      <HealthGauges workbook={workbook} forecasts={forecasts} today={today} />
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/add" className="rounded-xl bg-green-900 px-4 py-3 text-center font-medium text-white active:bg-green-800">
-          + Add expense
-        </Link>
-        <Link to="/add/other?type=save" className="rounded-xl border border-green-900 bg-white px-4 py-3 text-center font-medium text-green-900 active:bg-green-50">
-          + Add savings
-        </Link>
+    <section className="mx-auto max-w-4xl space-y-4">
+      <h1 className="sr-only">Dashboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
+          <Link to="/add" className="rounded-xl bg-green-900 px-4 py-2.5 text-center text-sm font-medium text-white active:bg-green-800">
+            + Add expense
+          </Link>
+          <Link to="/add/other?type=save" className="rounded-xl border border-green-900 bg-white px-4 py-2.5 text-center text-sm font-medium text-green-900 active:bg-green-50">
+            + Add savings
+          </Link>
+        </div>
       </div>
-      <DueAlert items={due} today={today} />
+      <Progress workbook={workbook} owed={owed} today={today} last={lastInstallment(forecasts, today)} />
+      <Alerts workbook={workbook} forecasts={forecasts} today={today} />
+      <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
+      <Tiles workbook={workbook} forecasts={forecasts} today={today} />
+      <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
     </section>
   )
 }

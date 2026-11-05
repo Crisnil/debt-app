@@ -1,0 +1,76 @@
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { formatPeso } from '../../lib/money'
+
+export type DonutPart = { id: string; name: string; amount: number; color: string; to?: string }
+
+const GAP = 1.2 // % of the ring left as surface between parts
+
+/** Ring of parts with the total in the middle and a legend with the amounts. The legend carries every value. */
+export function Donut({ parts, centerLabel, children }: { parts: DonutPart[]; centerLabel: string; children?: ReactNode }) {
+  const total = parts.reduce((s, p) => s + p.amount, 0)
+  const shares = parts.map((p) => (total > 0 ? (p.amount / total) * 100 : 0))
+  const arcs = parts.map((p, i) => ({
+    ...p,
+    start: shares.slice(0, i).reduce((s, v) => s + v, 0),
+    length: Math.max(shares[i] - (parts.length > 1 ? GAP : 0), 0.5),
+  }))
+
+  return (
+    <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-6">
+      <svg viewBox="0 0 200 200" className="mx-auto w-44" role="img" aria-label={`${centerLabel}: ${formatPeso(total)}`}>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="#f1f5f9" strokeWidth="26" />
+        {arcs.map((a) => (
+          <circle
+            key={a.id}
+            cx="100"
+            cy="100"
+            r="78"
+            fill="none"
+            stroke={a.color}
+            strokeWidth="26"
+            pathLength={100}
+            strokeDasharray={`${a.length} ${100 - a.length}`}
+            strokeDashoffset={-a.start}
+            transform="rotate(-90 100 100)"
+          />
+        ))}
+        <text x="100" y="100" textAnchor="middle" fontSize="22" fontWeight="600" fill="#0f172a">
+          {formatPeso(total).replace(/\.\d{2}$/, '')}
+        </text>
+        <text x="100" y="122" textAnchor="middle" fontSize="12" fill="#64748b">
+          {centerLabel}
+        </text>
+      </svg>
+      <div>
+        {children}
+        <ul className="divide-y divide-slate-100 text-sm">
+          {parts.map((p) => {
+            const row = (
+              <>
+                <span className="flex items-center gap-2 text-slate-700">
+                  <span className="inline-block h-3 w-3 rounded-sm" style={{ background: p.color }} />
+                  {p.name}
+                </span>
+                <b className="text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatPeso(p.amount)}
+                </b>
+              </>
+            )
+            return (
+              <li key={p.id}>
+                {p.to ? (
+                  <Link to={p.to} className="flex items-center justify-between py-2">
+                    {row}
+                  </Link>
+                ) : (
+                  <div className="flex items-center justify-between py-2">{row}</div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
+  )
+}

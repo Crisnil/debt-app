@@ -205,6 +205,29 @@ function CreditLimits({ workbook }: { workbook: Workbook }) {
   )
 }
 
+function YourName({ workbook }: { workbook: Workbook }) {
+  const edit = useSheetEdit()
+  const [name, setName] = useState(workbook.settings.display_name?.value ?? '')
+  return (
+    <div className={card}>
+      <h2 className="font-medium text-slate-900">Your name</h2>
+      <p className="mt-1 text-sm text-slate-600">Home greets you with it.</p>
+      <div className="mt-3 flex items-end gap-2">
+        <div className="flex-1">
+          <Field label="Name" htmlFor="display-name">
+            <TextInput id="display-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Crisnil" />
+          </Field>
+        </div>
+        <Button variant="secondary" disabled={edit.busy} onClick={() => void edit.run('Saved your name.', (sheetId, wb, token) => saveSettings(sheetId, wb, { display_name: name.trim() }, token))}>
+          Save
+        </Button>
+      </div>
+      <ErrorNote message={edit.error} />
+      <SuccessNote message={edit.done} />
+    </div>
+  )
+}
+
 function SavingsGoal({ workbook }: { workbook: Workbook }) {
   const edit = useSheetEdit()
   const s = (key: string, fallback: string) => workbook.settings[key]?.value || fallback
@@ -275,6 +298,7 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
     .reduce((sum, s) => sum + s.amount * (s.frequency === 'per_payday' ? s.days.length : 1), 0)
   return (
     <>
+      <YourName workbook={workbook} />
       <div className={card}>
         <h2 className="font-medium text-slate-900">Income</h2>
         <p className="mt-1 text-sm text-slate-600">
