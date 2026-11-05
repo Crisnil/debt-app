@@ -121,7 +121,7 @@ export function PasteStatement({ sheetId, workbook, cardId }: { sheetId: string;
       <Field label="Statement date (cut-off)" htmlFor="ps-stmt">
         <TextInput id="ps-stmt" type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
       </Field>
-      <Field label="Paste the lines from your billing statement" htmlFor="ps-raw" hint="One transaction per line, with the dates and amount. Other lines are skipped.">
+      <Field label="Paste the lines from your billing statement" htmlFor="ps-raw" hint="From the PDF statement or the bank website transaction list. Lines that are not transactions are skipped.">
         <textarea
           id="ps-raw"
           rows={6}
