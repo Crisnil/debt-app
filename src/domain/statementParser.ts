@@ -82,9 +82,10 @@ const WEB_AMOUNT = /^([+-])\s*PHP\s*([\d,]+\.\d{2})$/i
 // Installments on the website are two lines: "<name> n/m PRIN" and "<name> n/m INT".
 const WEB_INSTALLMENT = /^(.+?)\s+(\d+)\/(\d+)\s+(PRIN|INT)$/i
 
-function webDate(m: RegExpMatchArray): IsoDate | null {
-  const month = MONTHS.indexOf(m[1].toLowerCase()) + 1
-  return month ? `${m[3]}-${String(month).padStart(2, '0')}-${m[2].padStart(2, '0')}` : null
+/** "Oct", "31", "2026" -> 2026-10-31. null for an unknown month. */
+function webDate(mon: string, day: string, year: string): IsoDate | null {
+  const month = MONTHS.indexOf(mon.slice(0, 3).toLowerCase()) + 1
+  return month ? `${year}-${String(month).padStart(2, '0')}-${day.padStart(2, '0')}` : null
 }
 
 /** Reads the bank website layout. Installment principal and interest of the same plan and date become one line. */
@@ -104,7 +105,7 @@ function parseWebsiteBlock(lines: string[]): ReadLine[] {
     const d = text.match(WEB_DATE)
     if (d) {
       flush()
-      date = webDate(d)
+      date = webDate(d[1], d[2], d[3])
       start = text
       if (!date) out.push({ raw: text, line: null })
       continue
@@ -149,15 +150,63 @@ function parseWebsiteBlock(lines: string[]): ReadLine[] {
   return out
 }
 
+// Metrobank website list: "<description> <purchase date> 12:00:00 AM <post date> 12:00:00 AM <reference no.>",
+// then the amount on the next line: "PHP 950.75" (charge) or "PHP (35,000.00)" (credit). Times and reference are optional.
+const MB_DATE = String.raw`([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)?`
+const MB_HEADER = new RegExp(String.raw`^(.+?)\s+${MB_DATE}\s+${MB_DATE}(?:\s+\d+)?$`, 'i')
+const MB_AMOUNT = /^PHP\s*(\()?\s*([\d,]+\.\d{2})\s*\)?$/i
+const MB_INSTALLMENT = /^INSTL\s+(\d+)\/(\d+)\s+(.+)$/i
+
+/** Reads the Metrobank website layout: a line with the description and both dates, then the amount line. */
+function parseMetrobankWebBlock(lines: string[]): ReadLine[] {
+  const out: ReadLine[] = []
+  let open: { raw: string; description: string; txn: IsoDate; post: IsoDate } | null = null
+  const flush = () => {
+    if (open) out.push({ raw: open.raw, line: null })
+    open = null
+  }
+  for (const text of lines) {
+    const h = text.match(MB_HEADER)
+    if (h) {
+      flush()
+      const txn = webDate(h[2], h[3], h[4])
+      const post = webDate(h[5], h[6], h[7])
+      if (txn && post) open = { raw: text, description: h[1].trim(), txn, post }
+      else out.push({ raw: text, line: null })
+      continue
+    }
+    const a = text.match(MB_AMOUNT)
+    if (a && open) {
+      const { raw, description, txn, post } = open
+      const credit = Boolean(a[1])
+      const inst = credit ? null : description.match(MB_INSTALLMENT)
+      out.push({
+        raw: `${raw} ${text}`,
+        line: inst ? build(post, txn, inst[3], inst[1], inst[2], a[2], false) : build(post, txn, description, undefined, undefined, a[2], credit),
+      })
+      open = null
+      continue
+    }
+    // A reference number copied onto its own line belongs to the open transaction.
+    if (open && /^\d+$/.test(text)) continue
+    flush()
+    out.push({ raw: text, line: null })
+  }
+  flush()
+  return out
+}
+
 /**
- * Reads a pasted block: the bank website list (date, description, and amount on separate lines),
- * or one statement line per line (PDF layout). Lines that are not transactions come back with line = null.
+ * Reads a pasted block: the Metrobank website list, the Security Bank website list (date, description,
+ * and amount on separate lines), or one statement line per line (PDF layout). Lines that are not
+ * transactions come back with line = null.
  */
 export function parseStatementText(raw: string, format: BankFormat, statementDate: IsoDate): ReadLine[] {
   const lines = raw
     .split(/\r?\n/)
     .map((t) => t.trim().replace(/\s+/g, ' '))
     .filter(Boolean)
+  if (lines.some((t) => MB_HEADER.test(t)) && lines.some((t) => MB_AMOUNT.test(t))) return parseMetrobankWebBlock(lines)
   if (lines.some((t) => WEB_DATE.test(t)) && lines.some((t) => WEB_AMOUNT.test(t))) return parseWebsiteBlock(lines)
   return lines.map((text) => ({ raw: text, line: parseStatementLine(text, format, statementDate) }))
 }
