@@ -44,19 +44,33 @@ describe('planned living costs', () => {
 })
 
 describe('actual living costs', () => {
-  it('starts after the first full month of entries', () => {
-    // Fixture entries start on 2030-01-03, so January is not a full month.
-    expect(actualLiving(base, '2030-01-25')).toBeNull()
-    expect(actualLiving(base, '2030-02-10')).toBeNull()
+  // Fixture cards: Alpha straight purchases 2,500.25 over 2 statements = 1,250.13; Beta 1,200 on 1 statement.
+  const CARD = 125013 + 120000
+
+  it('counts card spending from the statements right away, and cash after 7 days of entries', () => {
+    // The only cash entry is on 2030-01-12: on the 15th that is 4 days, too few to scale.
+    expect(actualLiving(base, '2030-01-15')).toEqual({ monthly: CARD, card: CARD, cash: null, cashBasis: null })
+    // On the 25th: 150 in 14 days, scaled to 31 days = 332.14.
+    expect(actualLiving(base, '2030-01-25')).toEqual({
+      monthly: CARD + 33214,
+      card: CARD,
+      cash: 33214,
+      cashBasis: { kind: 'partial', from: '2030-01-12', to: '2030-01-25' },
+    })
   })
 
-  it('averages spending (each purchase once) over the last 3 full months', () => {
+  it('averages cash over the last 3 full months once there are full months', () => {
     const wb: Workbook = {
       ...base,
       transactions: [...base.transactions, cash('f', '2030-02-05', 300000), cash('m', '2030-03-05', 600000), cash('a', '2030-04-05', 900000), cash('y', '2030-05-02', 50000)],
     }
-    // Full months before May: Feb, Mar, Apr. 3,000 + 6,000 + 9,000 → 6,000 a month.
-    expect(actualLiving(wb, '2030-05-10')).toEqual({ monthly: 600000, months: ['2030-02', '2030-03', '2030-04'] })
+    expect(actualLiving(wb, '2030-05-10')).toMatchObject({ cash: 600000, cashBasis: { kind: 'months', months: ['2030-02', '2030-03', '2030-04'] } })
+  })
+
+  it('does not add logged card expenses again (the statements cover them)', () => {
+    const wb: Workbook = { ...base, transactions: [...base.transactions, cash('c', '2030-01-13', 999900, { methodId: 'alpha' })] }
+    expect(actualLiving(wb, '2030-01-15')?.card).toBe(CARD)
+    expect(actualLiving(wb, '2030-01-15')?.cash).toBeNull()
   })
 
   it('leaves out payments of loans, which the path counts as debt', () => {
@@ -65,7 +79,11 @@ describe('actual living costs', () => {
       payables: [payable({ payableId: 'loan', times: 5 })],
       transactions: [...base.transactions, cash('f', '2030-02-05', 300000), cash('l', '2030-02-15', 200000, { payableId: 'loan', payableMonth: '2030-02' })],
     }
-    expect(actualLiving(wb, '2030-03-10')).toEqual({ monthly: 300000, months: ['2030-02'] })
+    expect(actualLiving(wb, '2030-03-10')).toMatchObject({ cash: 300000, cashBasis: { kind: 'months', months: ['2030-02'] } })
+  })
+
+  it('is null when there are no statements and no entries', () => {
+    expect(actualLiving({ ...base, lines: [], transactions: [] }, '2030-01-25')).toBeNull()
   })
 })
 
@@ -82,14 +100,14 @@ describe('living costs in the payoff path', () => {
   })
 
   it('uses the actual path first, then the plan, then cards only', () => {
-    expect(payoffPaths(base, '2030-01-21')).toMatchObject({ planned: null, actual: null })
-    const withPlan: Workbook = { ...base, plannedExpenses: planned([1000000]) }
+    const empty: Workbook = { ...base, lines: [], transactions: [] }
+    expect(payoffPaths(empty, '2030-01-21')).toMatchObject({ planned: null, actual: null })
+    const withPlan: Workbook = { ...empty, plannedExpenses: planned([1000000]) }
     const p = payoffPaths(withPlan, '2030-01-21')
     expect(p.planned?.living).toBe(1000000)
     expect(p.main).toBe(p.planned?.result)
-    const withActual: Workbook = { ...withPlan, transactions: [...base.transactions, cash('f', '2030-02-05', 300000)] }
-    const a = payoffPaths(withActual, '2030-03-10')
-    expect(a.actual?.living.monthly).toBe(300000)
+    const a = payoffPaths({ ...base, plannedExpenses: planned([1000000]) }, '2030-01-15')
+    expect(a.actual?.living.monthly).toBe(125013 + 120000)
     expect(a.main).toBe(a.actual?.result)
   })
 })

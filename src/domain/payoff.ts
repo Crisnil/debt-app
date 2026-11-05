@@ -1,5 +1,7 @@
 import type { Centavos } from '../lib/money'
-import { billsByMonth, forecastCards, type CardForecast } from './forecast'
+import { cardForMethod } from './accounts'
+import { daysBetween } from './dues'
+import { billsByMonth, forecastCards, usualSpending, type CardForecast } from './forecast'
 import { addMonths, payablesByMonth } from './payables'
 import { spendingItems } from './reconcile'
 import type { IsoDate, Workbook } from './types'
@@ -164,26 +166,58 @@ export function plannedLiving(wb: Workbook): Centavos | null {
   return lines.length ? lines.reduce((s, e) => s + e.amount, 0) : null
 }
 
-export type ActualLiving = { monthly: Centavos; months: string[] }
+/** Days of cash entries needed before this month so far is scaled to a full month. */
+export const MIN_CASH_DAYS = 7
+
+export type ActualLiving = {
+  monthly: Centavos
+  /** Usual card spending: average straight purchases on the last 3 statements of each card. */
+  card: Centavos
+  /** Cash, bank, and e-wallet-load spending per month. null when there are not enough entries yet. */
+  cash: Centavos | null
+  /** What the cash part is based on: full months, or this month so far scaled to a full month. */
+  cashBasis: { kind: 'months'; months: string[] } | { kind: 'partial'; from: IsoDate; to: IsoDate } | null
+}
 
 /**
- * Actual monthly living costs: average spending (each purchase once) over the last 3 full months since you started
- * logging. null until there is one full month of entries.
+ * Actual monthly living costs, from real data:
+ * - cards: average straight purchases on the last 3 statements of each card (the statements cover card spending, so
+ *   logged card expenses are not added again);
+ * - cash, bank, and e-wallet loads (and bills paid that way): the average of the last 3 full months of entries, or,
+ *   before the first full month, this month so far scaled to a full month once there are 7 days of entries.
+ * Payments of loans and one-time debts are left out: the path counts them as debt. null when there is no data at all.
  */
 export function actualLiving(wb: Workbook, today: IsoDate): ActualLiving | null {
-  const start = wb.transactions.reduce<string | null>((min, t) => (min === null || t.date < min ? t.date : min), null)
-  if (!start) return null
-  const items = spendingItems(wb)
-  const thisMonth = today.slice(0, 7)
-  const full: string[] = []
-  for (let m = addMonths(start.slice(0, 7), 1); m < thisMonth && full.length < 36; m = addMonths(m, 1)) full.push(m)
-  const months = full.slice(-3)
-  if (months.length === 0) return null
-  const total = items.filter((i) => months.includes(i.date.slice(0, 7))).reduce((s, i) => s + i.amount, 0)
-  // Payments of loans and one-time debts are debt, not living costs: the path counts them already.
+  const card = wb.cards.filter((c) => c.active).reduce((s, c) => s + usualSpending(wb.lines.filter((l) => l.cardId === c.cardId)), 0)
   const debt = new Set(wb.payables.filter((p) => !p.recurring || p.times !== null).map((p) => p.payableId))
-  const debtPaid = wb.transactions.filter((t) => t.payableId && debt.has(t.payableId) && months.includes(t.date.slice(0, 7))).reduce((s, t) => s + t.amount, 0)
-  return { monthly: Math.round(Math.max(total - debtPaid, 0) / months.length), months }
+  const debtPaid = (inRange: (date: string) => boolean) =>
+    wb.transactions.filter((t) => t.payableId && debt.has(t.payableId) && !cardForMethod(wb, t.methodId) && inRange(t.date)).reduce((s, t) => s + t.amount, 0)
+  const cashItems = spendingItems(wb).filter((i) => !cardForMethod(wb, i.methodId))
+  const cashSpent = (inRange: (date: string) => boolean) => Math.max(cashItems.filter((i) => inRange(i.date)).reduce((s, i) => s + i.amount, 0) - debtPaid(inRange), 0)
+
+  const start = wb.transactions.filter((t) => !cardForMethod(wb, t.methodId)).reduce<string | null>((min, t) => (min === null || t.date < min ? t.date : min), null)
+  const thisMonth = today.slice(0, 7)
+  let cash: Centavos | null = null
+  let cashBasis: ActualLiving['cashBasis'] = null
+  if (start) {
+    const full: string[] = []
+    for (let m = addMonths(start.slice(0, 7), 1); m < thisMonth && full.length < 36; m = addMonths(m, 1)) full.push(m)
+    const months = full.slice(-3)
+    if (months.length > 0) {
+      cash = Math.round(cashSpent((d) => months.includes(d.slice(0, 7))) / months.length)
+      cashBasis = { kind: 'months', months }
+    } else {
+      const from = start > `${thisMonth}-01` ? start : `${thisMonth}-01`
+      const days = daysBetween(from, today) + 1
+      if (days >= MIN_CASH_DAYS) {
+        const daysInMonth = new Date(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0).getDate()
+        cash = Math.round((cashSpent((d) => d >= from && d <= today) * daysInMonth) / days)
+        cashBasis = { kind: 'partial', from, to: today }
+      }
+    }
+  }
+  if (card === 0 && cash === null) return null
+  return { monthly: card + (cash ?? 0), card, cash, cashBasis }
 }
 
 export type PayoffPaths = {
