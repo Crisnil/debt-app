@@ -153,6 +153,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
           openingDate: isoDate(r.opening_date),
           isSavings: bool(r.is_savings),
           active: bool(r.active),
+          maintainingBalance: money(r.maintaining_balance),
           row: r.__row,
         }
       }),

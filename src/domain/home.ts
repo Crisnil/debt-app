@@ -23,6 +23,24 @@ export function savingsParts(wb: Workbook): SavingsPart[] {
     .map((b) => ({ id: b.account.accountId, name: b.account.label, amount: Math.max(b.balance, 0) }))
 }
 
+export type MoneyPart = { id: string; name: string; amount: Centavos; isSavings: boolean; maintaining: Centavos }
+
+/** What we have: the balance of every active money account (banks, cash, e-wallets), biggest first. */
+export function moneyParts(wb: Workbook): MoneyPart[] {
+  return accountBalances(wb)
+    .map((b) => ({ id: b.account.accountId, name: b.account.label, amount: b.balance, isSavings: b.account.isSavings, maintaining: b.account.maintainingBalance }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
+/** Totals of what we have: all accounts, savings accounts, and spendable now (not savings, above the maintaining balance). */
+export function moneyTotals(parts: MoneyPart[]): { total: Centavos; savings: Centavos; spendable: Centavos } {
+  return {
+    total: parts.reduce((s, p) => s + Math.max(p.amount, 0), 0),
+    savings: parts.filter((p) => p.isSavings).reduce((s, p) => s + Math.max(p.amount, 0), 0),
+    spendable: parts.filter((p) => !p.isSavings).reduce((s, p) => s + Math.max(p.amount - p.maintaining, 0), 0),
+  }
+}
+
 /** The last installment payment of all cards: its due month and the months left from this month. */
 export function lastInstallment(forecasts: CardForecast[], today: IsoDate): { month: string; monthsLeft: number } | null {
   const last = installmentsEnding(forecasts).at(-1)
