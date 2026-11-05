@@ -1,4 +1,4 @@
-import type { IncomeEntry, Payable, PayableAmount, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
+import type { IncomeEntry, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
 import { appendRows, getTabValues, type CellValue } from '../google/sheetsApi'
 import { isoDate, rowsToObjects, text } from './cells'
 import { toRow } from './rows'
@@ -11,6 +11,7 @@ export type OutboxItem =
   | { key: string; tab: 'IncomeLog'; record: Record<string, CellValue>; entity: { kind: 'income'; value: IncomeEntry } }
   | { key: string; tab: 'Payables'; record: Record<string, CellValue>; entity: { kind: 'payable'; value: Payable } }
   | { key: string; tab: 'PayableAmounts'; record: Record<string, CellValue>; entity: { kind: 'payableAmount'; value: PayableAmount } }
+  | { key: string; tab: 'PlannedExpenses'; record: Record<string, CellValue>; entity: { kind: 'plannedExpense'; value: PlannedExpense } }
   | { key: string; tab: string; record: Record<string, CellValue>; entity: { kind: 'statementLine'; value: StatementLine } }
 
 /** Column that holds the unique key of each tab. Statement tabs have no ID column, so a content key is used. */
@@ -21,6 +22,7 @@ const ID_COLUMN: Record<string, string> = {
   IncomeLog: 'income_id',
   Payables: 'payable_id',
   PayableAmounts: 'entry_id',
+  PlannedExpenses: 'item_id',
 }
 
 export function statementLineKey(r: { statement_date?: unknown; post_date?: unknown; description?: unknown; amount?: unknown }): string {
@@ -116,6 +118,7 @@ export function mergeOutbox(workbook: Workbook, items: OutboxItem[]): Workbook {
     lines: [...workbook.lines],
     payables: [...workbook.payables],
     payableAmounts: [...workbook.payableAmounts],
+    plannedExpenses: [...workbook.plannedExpenses],
   }
   for (const { entity } of items) {
     if (entity.kind === 'expense') wb.transactions.push(entity.value)
@@ -124,6 +127,7 @@ export function mergeOutbox(workbook: Workbook, items: OutboxItem[]): Workbook {
     else if (entity.kind === 'income') wb.incomeLog.push(entity.value)
     else if (entity.kind === 'payable') wb.payables.push(entity.value)
     else if (entity.kind === 'payableAmount') wb.payableAmounts.push(entity.value)
+    else if (entity.kind === 'plannedExpense') wb.plannedExpenses.push(entity.value)
     else wb.lines.push(entity.value)
   }
   return wb
