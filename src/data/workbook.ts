@@ -1,11 +1,11 @@
 import type { AccountType, CardSnapshot, IncomeType, LineType, StatementLine, Workbook } from '../domain/types'
 import { getSheetMeta, getTabValues, type TabValues } from '../google/sheetsApi'
-import { bool, dayList, int, isoDate, money, num, rowsToObjects, text } from './cells'
-import { checkHeaders, checkTabs, STATEMENT_TAB_HEADERS, TABS, type SchemaProblem, type TabName } from './schema'
+import { bool, dayList, int, isoDate, money, num, rowsToObjects, text, yearMonth } from './cells'
+import { checkHeaders, checkTabs, OPTIONAL_TABS, sheetUpdates, STATEMENT_TAB_HEADERS, TABS, type SchemaProblem, type TabName } from './schema'
 
 const LINE_TYPES = new Set<LineType>(['installment', 'straight', 'payment', 'interest', 'fee', 'credit'])
 const ACCOUNT_TYPES = new Set<AccountType>(['credit_card', 'bank', 'e-wallet', 'cash'])
-const INCOME_TYPES = new Set<IncomeType>(['salary', 'allowance', 'bonus', '13th_month', 'side', 'other', 'ewallet_return'])
+const INCOME_TYPES = new Set<IncomeType>(['salary', 'allowance', 'bonus', '13th_month', 'side', 'other', 'ewallet_return', 'gift', 'repayment'])
 
 export class SchemaError extends Error {
   readonly problems: SchemaProblem[]
@@ -90,9 +90,36 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
       interestCharged: money(r.interest_charged),
     }))
 
+  // Optional tabs: read only the ones that have the right header row.
+  const optional = (tab: keyof typeof OPTIONAL_TABS) =>
+    availableTabs.includes(tab) && checkHeaders(tab, values[tab]?.[0], OPTIONAL_TABS[tab]).length === 0 ? rowsToObjects(values[tab]) : []
+  const payables = optional('Payables')
+    .filter((r) => text(r.payable_id) && text(r.name))
+    .map((r) => ({
+      payableId: text(r.payable_id),
+      name: text(r.name),
+      payee: text(r.payee),
+      category: text(r.category),
+      amount: money(r.amount),
+      recurring: bool(r.recurring),
+      dueDay: int(r.due_day),
+      startMonth: yearMonth(r.start_month),
+      times: int(r.times),
+      active: text(r.active) === '' ? true : bool(r.active),
+      note: text(r.note),
+      row: r.__row,
+    }))
+  const payableAmounts = optional('PayableAmounts')
+    .filter((r) => text(r.payable_id) && text(r.month))
+    .map((r) => ({ payableId: text(r.payable_id), month: yearMonth(r.month), amount: money(r.amount), createdAt: text(r.created_at) }))
+  const updates = sheetUpdates(availableTabs, headers, cards.map((c) => c.sheetTab).filter((t) => t && availableTabs.includes(t)))
+
   return {
     title,
     headers,
+    payables,
+    payableAmounts,
+    updates,
     settings,
     cards,
     snapshots,
@@ -135,6 +162,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         category: text(r.category),
         methodId: text(r.method_id),
         note: text(r.note),
+        payableId: text(r.payable_id),
+        payableMonth: yearMonth(r.payable_month),
       })),
     transfers: rowsToObjects(values.Transfers)
       .filter((r) => isoDate(r.date) && text(r.from_account) && text(r.to_account))
@@ -179,7 +208,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
 /** Reads every tab the app needs in three requests: metadata, fixed tabs, then the card statement tabs. */
 export async function loadWorkbook(sheetId: string, token: string): Promise<Workbook> {
   const meta = await getSheetMeta(sheetId, token)
-  const fixed = FIXED_TABS.filter((t) => meta.tabs.includes(t))
+  const fixed = [...FIXED_TABS, ...(Object.keys(OPTIONAL_TABS) as string[])].filter((t) => meta.tabs.includes(t))
   const first = await getTabValues(sheetId, fixed, token)
   const cardTabs = rowsToObjects(first.Cards ?? [])
     .map((r) => text(r.sheet_tab))

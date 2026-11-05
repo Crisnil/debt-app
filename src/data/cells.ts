@@ -69,3 +69,11 @@ export function isoDate(value: CellValue | undefined): string {
   }
   return ''
 }
+
+/** A month cell as YYYY-MM. Accepts "2026-11", or a date that Sheets made from it. */
+export function yearMonth(value: CellValue | undefined): string {
+  const t = text(value)
+  if (/^\d{4}-\d{2}/.test(t)) return t.slice(0, 7)
+  const d = isoDate(value)
+  return /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : ''
+}

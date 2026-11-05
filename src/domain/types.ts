@@ -1,3 +1,4 @@
+import type { SheetUpdate } from '../data/schema'
 import type { Centavos } from '../lib/money'
 
 /** ISO date string, YYYY-MM-DD. */
@@ -74,7 +75,33 @@ export type Transaction = {
   category: string
   methodId: string
   note: string
+  /** Set when this expense pays a payable (bill or money owed). */
+  payableId?: string
+  /** The month (YYYY-MM) of the payable that this expense pays. */
+  payableMonth?: string
 }
+
+/** A bill or money owed outside the credit cards. Recurring: every month from start_month, `times` times (null = no end). */
+export type Payable = {
+  payableId: string
+  name: string
+  payee: string
+  category: string
+  /** Usual amount per month (recurring) or the amount owed (one-time). */
+  amount: Centavos
+  recurring: boolean
+  /** Day of the month it is due. null = end of the month. */
+  dueDay: number | null
+  /** YYYY-MM of the first (or only) time. */
+  startMonth: string
+  times: number | null
+  active: boolean
+  note: string
+  row: number
+}
+
+/** The real amount of a recurring payable for one month, when it differs from the usual amount. */
+export type PayableAmount = { payableId: string; month: string; amount: Centavos; createdAt: string }
 
 /** Money moved between two accounts. Not spending. */
 export type Transfer = { transferId: string; date: IsoDate; fromAccount: string; toAccount: string; amount: Centavos; note: string }
@@ -91,8 +118,11 @@ export type IncomeSource = {
   row: number
 }
 
-/** ewallet_return: money moved from an e-wallet back to a bank. Not income: it lowers "E-wallet load" spending. */
-export type IncomeType = 'salary' | 'allowance' | 'bonus' | '13th_month' | 'side' | 'other' | 'ewallet_return'
+/**
+ * ewallet_return: money moved from an e-wallet back to a bank. Not income: it lowers "E-wallet load" spending.
+ * gift / repayment: money received from a person (a gift, or money paid back to you). Not part of the plan's income.
+ */
+export type IncomeType = 'salary' | 'allowance' | 'bonus' | '13th_month' | 'side' | 'other' | 'ewallet_return' | 'gift' | 'repayment'
 
 export type IncomeEntry = {
   incomeId: string
@@ -121,4 +151,8 @@ export type Workbook = {
   transfers: Transfer[]
   incomeSources: IncomeSource[]
   incomeLog: IncomeEntry[]
+  payables: Payable[]
+  payableAmounts: PayableAmount[]
+  /** Tabs and columns the sheet does not have yet (Settings → Update sheet). */
+  updates: SheetUpdate[]
 }

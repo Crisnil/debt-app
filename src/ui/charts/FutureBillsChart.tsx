@@ -176,6 +176,7 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
                     <b className="text-slate-900">{formatPeso(c.committed + c.estimate)}</b>
                   </p>
                   <p className="pl-4 text-xs text-slate-500">
+                    {c.items?.map((i) => `${i.label} ${formatPeso(i.amount)}`).join(' · ')}
                     {c.bills
                       .flatMap((b) => [
                         b.statementLeft && `statement ${formatPeso(b.statementLeft)}`,

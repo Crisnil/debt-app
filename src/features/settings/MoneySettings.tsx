@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
 import { moneyAccounts } from '../../domain/accounts'
+import { accountBalances } from '../../domain/balances'
 import { todayIso } from '../../domain/dues'
 import type { Account, Card, IncomeSource, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
@@ -126,7 +127,7 @@ function NewIncomeSource({ workbook }: { workbook: Workbook }) {
   )
 }
 
-function AccountRow({ account }: { account: Account }) {
+function AccountRow({ account, balance }: { account: Account; balance: number | undefined }) {
   const edit = useSheetEdit()
   const [amount, setAmount] = useState(toPesos(account.openingBalance).toFixed(2))
   const [date, setDate] = useState(account.openingDate || todayIso())
@@ -141,6 +142,7 @@ function AccountRow({ account }: { account: Account }) {
     <li className="space-y-2 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
       <p className="font-medium text-slate-900">
         {account.label} {account.isSavings && <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-900">savings</span>}
+        {balance !== undefined && <span className="float-right font-normal text-slate-700">Now {formatPeso(balance)}</span>}
       </p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Starting balance (₱)" htmlFor={`acc-${account.accountId}`}>
@@ -267,6 +269,7 @@ export function InstallCard() {
 
 export function MoneySettings({ workbook }: { workbook: Workbook }) {
   const accounts = moneyAccounts(workbook).filter((a) => a.active)
+  const balances = new Map(accountBalances(workbook).map((b) => [b.account.accountId, b.balance]))
   const monthlyPlan = workbook.incomeSources
     .filter((s) => s.active && s.inPlan)
     .reduce((sum, s) => sum + s.amount * (s.frequency === 'per_payday' ? s.days.length : 1), 0)
@@ -289,7 +292,7 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
         <p className="mt-1 text-sm text-slate-600">Balances count entries after the "as of" date. Use aliases only, never account numbers.</p>
         <ul className="mt-3 space-y-3">
           {accounts.map((a) => (
-            <AccountRow key={a.accountId} account={a} />
+            <AccountRow key={a.accountId} account={a} balance={balances.get(a.accountId)} />
           ))}
         </ul>
       </div>

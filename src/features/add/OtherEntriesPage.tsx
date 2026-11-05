@@ -3,9 +3,10 @@ import { Chips } from '../../ui/form'
 import { WithWorkbook } from '../WithWorkbook'
 import { CashOutForm } from './CashOutForm'
 import { IncomeForm } from './IncomeForm'
+import { ReceivedForm } from './ReceivedForm'
 import { SavingsForm } from './SavingsForm'
 
-const kinds = ['income', 'save', 'cashout'] as const
+const kinds = ['income', 'received', 'save', 'cashout'] as const
 
 type Kind = (typeof kinds)[number]
 
@@ -19,6 +20,7 @@ export function OtherEntriesPage() {
         const savings = workbook.accounts.filter((a) => a.active && a.isSavings)
         const labels: Record<Kind, string> = {
           income: 'Income',
+          received: 'Received money',
           save: `Save to ${savings.length === 1 ? savings[0].label : 'savings'}`,
           cashout: 'Cash-out from e-wallet',
         }
@@ -31,9 +33,10 @@ export function OtherEntriesPage() {
             <Chips label="What" options={kinds.map((k) => ({ value: k, label: labels[k] }))} value={kind} onChange={(v) => setParams({ type: v }, { replace: true })} />
             {/* key: reset the form when the type changes */}
             {kind === 'income' && <IncomeForm key="income" sheetId={sheetId} workbook={workbook} />}
+            {kind === 'received' && <ReceivedForm key="received" sheetId={sheetId} workbook={workbook} />}
             {kind === 'save' && <SavingsForm key="save" sheetId={sheetId} workbook={workbook} />}
             {kind === 'cashout' && <CashOutForm key="cashout" sheetId={sheetId} workbook={workbook} />}
-            <p className="text-sm text-slate-600">Card payments and statement lines are on each card&apos;s page.</p>
+            <p className="text-sm text-slate-600">Card payments and statement lines are on each card&apos;s page. Bills and money you owe are on Bills.</p>
           </section>
         )
       }}

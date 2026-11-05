@@ -1,6 +1,7 @@
 import { cardForMethod, EWALLET_LOAD } from './accounts'
 import { billFor } from './billing'
 import { daysBetween } from './dues'
+import { isEwalletPayablePayment } from './payables'
 import type { IsoDate, StatementLine, Transaction, Workbook } from './types'
 
 /** A statement line and an expense are the same purchase when the card and amount match and the dates are this close. */
@@ -139,6 +140,8 @@ export function spendingItems(wb: Workbook): SpendingItem[] {
   }
   for (const t of wb.transactions) {
     if (cardForMethod(wb, t.methodId)) continue
+    // Paying a bill from GCash or Maya: the e-wallet load already counted this money.
+    if (isEwalletPayablePayment(wb, t)) continue
     items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense' })
   }
   for (const i of wb.incomeLog) {

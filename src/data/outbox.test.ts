@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { newId } from '../lib/ids'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
-import { addExpense, addStatementLine } from './actions'
+import { addExpense, addPayable, addStatementLine, setPayableAmount } from './actions'
 import { clearOutbox, flushOutbox, mergeOutbox, readOutbox } from './outbox'
 import { cellRange, columnLetter, safeText, toRow } from './rows'
 import { parseWorkbook } from './workbook'
@@ -68,6 +68,19 @@ describe('outbox', () => {
       category: '',
     })
     expect(readOutbox(SHEET)[0]).toMatchObject({ tab: 'CC Alpha', record: { amount: -500, term_no: '' } })
+  })
+
+  it('queues payables, month amounts, and payments with the month kept as text', () => {
+    const p = addPayable(SHEET, { name: 'Sample bill', payee: '', category: 'Utilities', amount: 180000, recurring: true, dueDay: 20, startMonth: '2030-01', times: null, note: '' })
+    setPayableAmount(SHEET, p.payableId, '2030-01', 214000)
+    addExpense(SHEET, { date: '2030-01-18', amount: 214000, merchant: 'Sample', category: 'Utilities', methodId: 'cash', note: '', payableId: p.payableId, payableMonth: '2030-01' })
+    const items = readOutbox(SHEET)
+    expect(items.map((i) => i.tab)).toEqual(['Payables', 'PayableAmounts', 'Transactions'])
+    expect(items[0].record).toMatchObject({ start_month: "'2030-01", recurring: true, times: '' })
+    expect(items[2].record).toMatchObject({ payable_id: p.payableId, payable_month: "'2030-01" })
+    const merged = mergeOutbox(wb, items)
+    expect(merged.payables.at(-1)?.payableId).toBe(p.payableId)
+    expect(merged.payableAmounts.at(-1)).toMatchObject({ month: '2030-01', amount: 214000 })
   })
 
   it('adds only rows that are not in the sheet yet, then empties the outbox', async () => {

@@ -35,8 +35,8 @@ describe('App shell', () => {
 
   it('navigates with the bottom nav', async () => {
     renderAt('/')
-    await userEvent.click(screen.getByRole('link', { name: 'Budget' }))
-    expect(screen.getByRole('heading', { name: 'Budget' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Plan' }))
+    expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument()
   })
 
   it('opens the expense form from the + button and hides the button there', async () => {

@@ -80,3 +80,12 @@ export async function updateCells(sheetId: string, updates: { range: string; val
     body: { valueInputOption: 'USER_ENTERED', data: updates },
   })
 }
+
+/** Adds empty tabs (sheets) to the spreadsheet. */
+export async function addTabs(sheetId: string, titles: string[], token: string): Promise<void> {
+  if (titles.length === 0) return
+  await request(`${API}/${encodeURIComponent(sheetId)}:batchUpdate`, token, {
+    method: 'POST',
+    body: { requests: titles.map((title) => ({ addSheet: { properties: { title } } })) },
+  })
+}

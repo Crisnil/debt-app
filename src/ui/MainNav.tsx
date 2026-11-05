@@ -3,8 +3,8 @@ import { Link, NavLink } from 'react-router-dom'
 const items = [
   { to: '/', label: 'Home' },
   { to: '/cards', label: 'Cards' },
-  { to: '/purchases', label: 'Purchases' },
-  { to: '/budget', label: 'Budget' },
+  { to: '/bills', label: 'Bills' },
+  { to: '/plan', label: 'Plan' },
   { to: '/settings', label: 'Settings' },
 ]
 

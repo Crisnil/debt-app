@@ -16,6 +16,39 @@ export const TABS = {
 
 export type TabName = keyof typeof TABS
 
+/** Tabs the app can add with Settings → Update sheet. The app works without them; their features stay off. */
+export const OPTIONAL_TABS = {
+  Payables: ['payable_id', 'created_at', 'name', 'payee', 'category', 'amount', 'recurring', 'due_day', 'start_month', 'times', 'active', 'note'],
+  PayableAmounts: ['entry_id', 'payable_id', 'month', 'amount', 'created_at'],
+} as const
+
+export type OptionalTab = keyof typeof OPTIONAL_TABS
+
+/** Columns the app can add at the end of an existing tab. */
+export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
+  Cards: ['credit_limit'],
+  Transactions: ['payable_id', 'payable_month'],
+}
+
+/** A tab to add (with its header row) or columns to add at the end of a tab's header row. */
+export type SheetUpdate = { tab: string; create: boolean; columns: string[] }
+
+/** What Update sheet would add: missing optional tabs, optional columns, and txn_id on card statement tabs. */
+export function sheetUpdates(availableTabs: readonly string[], headers: Record<string, string[]>, statementTabs: readonly string[]): SheetUpdate[] {
+  const updates: SheetUpdate[] = []
+  for (const [tab, columns] of Object.entries(OPTIONAL_TABS)) {
+    if (!availableTabs.includes(tab)) updates.push({ tab, create: true, columns: [...columns] })
+  }
+  const wanted: [string, readonly string[]][] = [...Object.entries(OPTIONAL_COLUMNS), ...statementTabs.map((t): [string, readonly string[]] => [t, ['txn_id']])]
+  for (const [tab, columns] of wanted) {
+    const have = headers[tab]
+    if (!have) continue
+    const missing = columns.filter((c) => !have.includes(c))
+    if (missing.length) updates.push({ tab, create: false, columns: missing })
+  }
+  return updates
+}
+
 /** Headers for each card's statement tab (named in Cards.sheet_tab). txn_id is optional. */
 export const STATEMENT_TAB_HEADERS = [
   'statement_date',

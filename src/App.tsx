@@ -4,7 +4,8 @@ import { OtherEntriesPage } from './features/add/OtherEntriesPage'
 import { CardPage } from './features/cards/CardPage'
 import { CardsPage } from './features/cards/CardsPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
-import { Placeholder } from './features/Placeholder'
+import { BillsPage } from './features/bills/BillsPage'
+import { PlanPage } from './features/plan/PlanPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { useSync } from './state/hooks'
 import { AddButton } from './ui/AddButton'
@@ -46,8 +47,8 @@ export default function App() {
             <Route path="/cards" element={<CardsPage />} />
             <Route path="/cards/:cardId" element={<CardPage />} />
             <Route path="/reconcile/:cardId" element={<ReconcileRedirect />} />
-            <Route path="/purchases" element={<Placeholder title="Purchases" phase={5} detail="All purchases from every card and cash." />} />
-            <Route path="/budget" element={<Placeholder title="Budget" phase={5} detail="This week per category vs. the weekly limit." />} />
+            <Route path="/bills" element={<BillsPage />} />
+            <Route path="/plan" element={<PlanPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
