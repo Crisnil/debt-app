@@ -142,3 +142,50 @@ describe('parseStatementText: bank website layout', () => {
     expect(row.line).toMatchObject({ txnDate: '2030-03-31', amount: 9950 })
   })
 })
+
+// Made-up block in the same layout as the Metrobank website transaction list (tabs between columns).
+const METROBANK_WEB = [
+  'CASH PAYMENT - THANK YOU - MB\tMar 30, 2030 12:00:00 AM\tMar 30, 2030 12:00:00 AM\t1000000001\t',
+  'PHP (5,000.00)',
+  'SAMPLE PHARMACY, CITY, PHL\tMar 25, 2030 12:00:00 AM\tMar 26, 2030 12:00:00 AM\t1000000002\t',
+  'PHP 950.75',
+  'INSTL 3/3 SAMPLE STORE 1% AT 3M\tJan 27, 2030 12:00:00 AM\tMar 27, 2030 12:00:00 AM\t1000000003',
+  'PHP 1,300.01',
+  'SAMPLE MART, CITY\tMar 10, 2030\tMar 11, 2030',
+  '1000000004',
+  'PHP 99.50',
+].join('\n')
+
+describe('parseStatementText: Metrobank website layout', () => {
+  const rows = parseStatementText(METROBANK_WEB, 'metrobank', '2030-04-09')
+  const lines = rows.flatMap((r) => (r.line ? [r.line] : []))
+
+  it('reads every transaction and skips nothing', () => {
+    expect(rows.every((r) => r.line)).toBe(true)
+    expect(lines).toHaveLength(4)
+  })
+
+  it('reads the purchase date first and the post date second', () => {
+    expect(lines[1]).toEqual({
+      postDate: '2030-03-26',
+      txnDate: '2030-03-25',
+      description: 'SAMPLE PHARMACY, CITY, PHL',
+      type: 'straight',
+      amount: 95075,
+      termNo: null,
+      totalTerms: null,
+    })
+  })
+
+  it('reads an amount in brackets as a credit, and PAYMENT as a payment', () => {
+    expect(lines[0]).toMatchObject({ type: 'payment', amount: -500000, txnDate: '2030-03-30' })
+  })
+
+  it('reads INSTL n/m as an installment with the original purchase date', () => {
+    expect(lines[2]).toMatchObject({ type: 'installment', description: 'SAMPLE STORE 1% AT 3M', termNo: 3, totalTerms: 3, txnDate: '2030-01-27', postDate: '2030-03-27', amount: 130001 })
+  })
+
+  it('accepts lines without times and a reference number on its own line', () => {
+    expect(lines[3]).toMatchObject({ txnDate: '2030-03-10', postDate: '2030-03-11', amount: 9950 })
+  })
+})
