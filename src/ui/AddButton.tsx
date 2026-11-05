@@ -19,14 +19,15 @@ const ACTIONS = [
  * Tap ×, tap outside, or press Escape to close. Hidden on the Add pages.
  */
 export function AddButton() {
-  const { pathname, search } = useLocation()
-  const [open, setOpen] = useState(false)
+  const { pathname, key } = useLocation()
+  // The menu is open only on the page where it was opened, so it closes after moving to another page.
+  const [openOn, setOpenOn] = useState<string | null>(null)
+  const open = openOn === key
+  const setOpen = (value: boolean) => setOpenOn(value ? key : null)
 
-  // Close after moving to another page.
-  useEffect(() => setOpen(false), [pathname, search])
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpenOn(null)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
