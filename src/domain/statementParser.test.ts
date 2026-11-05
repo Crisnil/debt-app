@@ -73,7 +73,48 @@ describe('parseStatementLine: other', () => {
   it('picks the format from the bank name', () => {
     expect(formatForBank('Metrobank')).toBe('metrobank')
     expect(formatForBank('Security Bank')).toBe('security')
-    expect(formatForBank('BPI')).toBe('auto')
+    expect(formatForBank('BPI')).toBe('bpi')
+    expect(formatForBank('Sample Bank')).toBe('auto')
+  })
+})
+
+// Made-up lines in the same layout as the BPI PDF statement (month names, no year).
+describe('parseStatementLine: BPI layout (month names, no year)', () => {
+  it('reads an installment with a zero-padded term and drops the trailing colon', () => {
+    expect(parseStatementLine('March 27 March 27 Sample Store City Ne: 07/24 1,234.56', 'bpi', '2030-03-27')).toEqual({
+      postDate: '2030-03-27',
+      txnDate: '2030-03-27',
+      description: 'Sample Store City Ne',
+      type: 'installment',
+      amount: 123456,
+      termNo: 7,
+      totalTerms: 24,
+    })
+  })
+
+  it('reads a purchase with a number in the description', () => {
+    expect(parseStatementLine('March 5 March 6 Bp Sample 0000000000 1,200.00', 'bpi', '2030-03-27')).toMatchObject({
+      txnDate: '2030-03-05',
+      postDate: '2030-03-06',
+      description: 'Bp Sample 0000000000',
+      type: 'straight',
+      amount: 120000,
+    })
+  })
+
+  it('reads a leading minus or CR as a credit, and Payment as a payment', () => {
+    expect(parseStatementLine('March 8 March 8 Payment - Thank You -1,000.00', 'bpi', '2030-03-27')).toMatchObject({ type: 'payment', amount: -100000 })
+    expect(parseStatementLine('Mar 9 Mar 9 Sample Refund 50.00 CR', 'bpi', '2030-03-27')).toMatchObject({ type: 'credit', amount: -5000 })
+  })
+
+  it('uses the year before for months after the statement month', () => {
+    expect(parseStatementLine('December 30 January 2 Sample Shop 99.50', 'bpi', '2031-01-27')).toMatchObject({ txnDate: '2030-12-30', postDate: '2031-01-02' })
+  })
+
+  it('skips summary lines and the installment balance table', () => {
+    for (const text of ['Finance Charge 0.00', 'Ending Balance 3,595.42', '032730 032732 Sample Store 1,000.00 500.00']) {
+      expect(parseStatementLine(text, 'bpi', '2030-03-27')).toBeNull()
+    }
   })
 })
 
