@@ -1,6 +1,7 @@
 import type { Centavos } from '../lib/money'
 import { billsByMonth, forecastCards, type CardForecast } from './forecast'
-import { payablesByMonth } from './payables'
+import { addMonths, payablesByMonth } from './payables'
+import { spendingItems } from './reconcile'
 import type { IsoDate, Workbook } from './types'
 
 /** How far ahead the payoff path looks (months). */
@@ -107,6 +108,11 @@ export type PayoffOptions = {
   cut?: number
   /** Income sources (source_id) left out of the plan, e.g. the allowance. */
   excludeIncome?: string[]
+  /**
+   * Monthly living costs (planned expenses, or the actual average). When set, they replace the usual card spending,
+   * and open-ended bills (electric, water…) are not added again; loans with an end still count.
+   */
+  living?: Centavos
 }
 
 /** Average monthly_rate of the active cards (3% when not set). */
@@ -130,9 +136,10 @@ export function payoffInput(wb: Workbook, today: IsoDate, options: PayoffOptions
     return {
       month: m.month,
       cardKnown: sum((b) => b.statementLeft + b.installments + b.purchases + b.fees),
-      cardEstimate: sum((b) => b.estimate),
+      // Living costs this month, less card purchases already known for this month's bills (spent last month).
+      cardEstimate: options.living === undefined ? sum((b) => b.estimate) : Math.max(options.living - sum((b) => b.purchases), 0),
       installments: sum((b) => b.installments),
-      nonCard: (payables.get(m.month) ?? []).reduce((s, p) => s + p.left, 0),
+      nonCard: (payables.get(m.month) ?? []).filter((p) => options.living === undefined || !p.payable.recurring || p.payable.times !== null).reduce((s, p) => s + p.left, 0),
       nonCardDebt: (payables.get(m.month) ?? []).filter((p) => !p.payable.recurring || p.payable.times !== null).reduce((s, p) => s + p.left, 0),
       carriedIn: sum((b) => b.carried - b.interestEstimate),
       carriedInterest: sum((b) => b.interestEstimate),
@@ -149,4 +156,50 @@ export function payoffPath(wb: Workbook, today: IsoDate, options: PayoffOptions 
 /** Whole months from this month to `month` (YYYY-MM). */
 export function monthsUntil(today: IsoDate, month: string): number {
   return (Number(month.slice(0, 4)) - Number(today.slice(0, 4))) * 12 + Number(month.slice(5, 7)) - Number(today.slice(5, 7))
+}
+
+/** Planned monthly living costs: the total of the active planned expense lines. null when there are none. */
+export function plannedLiving(wb: Workbook): Centavos | null {
+  const lines = wb.plannedExpenses.filter((e) => e.active)
+  return lines.length ? lines.reduce((s, e) => s + e.amount, 0) : null
+}
+
+export type ActualLiving = { monthly: Centavos; months: string[] }
+
+/**
+ * Actual monthly living costs: average spending (each purchase once) over the last 3 full months since you started
+ * logging. null until there is one full month of entries.
+ */
+export function actualLiving(wb: Workbook, today: IsoDate): ActualLiving | null {
+  const start = wb.transactions.reduce<string | null>((min, t) => (min === null || t.date < min ? t.date : min), null)
+  if (!start) return null
+  const items = spendingItems(wb)
+  const thisMonth = today.slice(0, 7)
+  const full: string[] = []
+  for (let m = addMonths(start.slice(0, 7), 1); m < thisMonth && full.length < 36; m = addMonths(m, 1)) full.push(m)
+  const months = full.slice(-3)
+  if (months.length === 0) return null
+  const total = items.filter((i) => months.includes(i.date.slice(0, 7))).reduce((s, i) => s + i.amount, 0)
+  // Payments of loans and one-time debts are debt, not living costs: the path counts them already.
+  const debt = new Set(wb.payables.filter((p) => !p.recurring || p.times !== null).map((p) => p.payableId))
+  const debtPaid = wb.transactions.filter((t) => t.payableId && debt.has(t.payableId) && months.includes(t.date.slice(0, 7))).reduce((s, t) => s + t.amount, 0)
+  return { monthly: Math.round(Math.max(total - debtPaid, 0) / months.length), months }
+}
+
+export type PayoffPaths = {
+  /** Usual card spending only (no cash): shown when there are no planned expenses yet. */
+  cards: PayoffResult
+  planned: { result: PayoffResult; living: Centavos } | null
+  actual: { result: PayoffResult; living: ActualLiving } | null
+  /** The path to trust most: actual, else planned, else cards only. */
+  main: PayoffResult
+}
+
+export function payoffPaths(wb: Workbook, today: IsoDate, options: Omit<PayoffOptions, 'living'> = {}): PayoffPaths {
+  const cards = payoffPath(wb, today, options)
+  const plan = plannedLiving(wb)
+  const act = actualLiving(wb, today)
+  const planned = plan === null ? null : { result: payoffPath(wb, today, { ...options, living: plan }), living: plan }
+  const actual = act === null ? null : { result: payoffPath(wb, today, { ...options, living: act.monthly }), living: act }
+  return { cards, planned, actual, main: actual?.result ?? planned?.result ?? cards }
 }

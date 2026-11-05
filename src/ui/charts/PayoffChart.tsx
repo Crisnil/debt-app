@@ -5,8 +5,11 @@ import { monthLabel, niceStep, shortPeso, STATUS } from './palette'
 
 const OWED = STATUS.bad.fill
 const SAVED = STATUS.good.fill
-const H = 220
+const H = 240
 const PAD = { left: 48, right: 12, top: 16, bottom: 24 }
+
+/** One payoff path. The first path is the main one (marker and table). Dashed: a plan; solid: actual. */
+export type ChartPath = { key: string; label: string; dashed: boolean; months: PayoffMonth[] }
 
 function useWidth(fallback: number) {
   const ref = useRef<HTMLDivElement>(null)
@@ -23,32 +26,46 @@ function useWidth(fallback: number) {
   return [ref, width] as const
 }
 
-/** Two lines on one peso axis: what we still owe and total savings, month by month. Tap a month for both values. */
-export function PayoffChart({ months }: { months: PayoffMonth[] }) {
+/**
+ * What we still owe (red) and savings (green) month by month, on one peso axis, for one or more paths.
+ * Line style tells the paths apart (solid / dashed), so color keeps one meaning. Tap a month for all values.
+ */
+export function PayoffChart({ paths }: { paths: ChartPath[] }) {
   const [ref, W] = useWidth(360)
   const [active, setActive] = useState(0)
-  const max = Math.max(1, ...months.map((m) => Math.max(m.owed, m.savedTotal)))
+  const months = paths[0]?.months ?? []
+  const max = Math.max(1, ...paths.flatMap((p) => p.months.map((m) => Math.max(m.owed, m.savedTotal))))
   const step = niceStep(max)
   const top = Math.ceil(max / step) * step
   const plotW = W - PAD.left - PAD.right
   const plotH = H - PAD.top - PAD.bottom
   const x = (i: number) => PAD.left + (months.length > 1 ? (i / (months.length - 1)) * plotW : plotW / 2)
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH
-  const line = (f: (m: PayoffMonth) => number) => months.map((m, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(f(m)).toFixed(1)}`).join('')
+  const line = (ms: PayoffMonth[], f: (m: PayoffMonth) => number) => ms.map((m, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(f(m)).toFixed(1)}`).join('')
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step)
   const labelEvery = Math.max(1, Math.ceil(months.length / Math.floor(plotW / 44)))
-  const cross = months.findIndex((m) => m.savedTotal >= m.owed && m.savedTotal > 0)
-  const sel = months[active]
+  const main = paths[0]?.months ?? []
+  const cross = main.findIndex((m) => m.savedTotal >= m.owed && m.savedTotal > 0)
+  const band = plotW / Math.max(months.length - 1, 1)
 
   return (
     <div ref={ref}>
-      <ul className="flex flex-wrap gap-x-4 text-xs text-slate-600" aria-label="Legend">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Legend">
         <li className="flex items-center gap-1.5">
-          <span className="inline-block h-0.5 w-3" style={{ background: OWED }} /> Still owed
+          <span className="inline-block h-0.5 w-4" style={{ background: OWED }} /> Still owed
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="inline-block h-0.5 w-3" style={{ background: SAVED }} /> Savings
+          <span className="inline-block h-0.5 w-4" style={{ background: SAVED }} /> Savings
         </li>
+        {paths.length > 1 &&
+          paths.map((p) => (
+            <li key={p.key} className="flex items-center gap-1.5">
+              <svg width="18" height="4" aria-hidden="true">
+                <line x1="0" x2="18" y1="2" y2="2" stroke="#475569" strokeWidth="2" strokeDasharray={p.dashed ? '4 3' : undefined} />
+              </svg>
+              {p.label}
+            </li>
+          ))}
       </ul>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="mt-2 block max-w-full" role="img" aria-label="What we still owe and savings, month by month">
         {ticks.map((t) => (
@@ -61,34 +78,39 @@ export function PayoffChart({ months }: { months: PayoffMonth[] }) {
         ))}
         {months.map((m, i) =>
           i % labelEvery === 0 ? (
-            <text key={m.month} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="#64748b">
+            <text key={m.month} x={x(i)} y={H - 6} textAnchor={x(i) > W - PAD.right - 24 ? 'end' : 'middle'} fontSize="11" fill="#64748b">
               {monthLabel(m.month, false)}
               {m.month.endsWith('-01') || i === 0 ? ` ’${m.month.slice(2, 4)}` : ''}
             </text>
           ) : null,
         )}
         <line x1={x(active)} x2={x(active)} y1={PAD.top} y2={PAD.top + plotH} stroke="#cbd5e1" strokeWidth="1" />
-        <path d={line((m) => m.owed)} fill="none" stroke={OWED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <path d={line((m) => m.savedTotal)} fill="none" stroke={SAVED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Draw the main path last so it sits on top. */}
+        {[...paths].reverse().map((p) => (
+          <g key={p.key}>
+            <path d={line(p.months, (m) => m.owed)} fill="none" stroke={OWED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" strokeDasharray={p.dashed ? '6 4' : undefined} />
+            <path d={line(p.months, (m) => m.savedTotal)} fill="none" stroke={SAVED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" strokeDasharray={p.dashed ? '6 4' : undefined} />
+          </g>
+        ))}
         {cross > 0 && (
           <g>
-            <circle cx={x(cross)} cy={y(months[cross].savedTotal)} r="5" fill={SAVED} stroke="#ffffff" strokeWidth="2" />
-            <text x={Math.min(x(cross) + 8, W - PAD.right)} y={y(months[cross].savedTotal) - 8} textAnchor={x(cross) > W - 120 ? 'end' : 'start'} fontSize="11" fill="#0f172a">
-              Savings pass debt
+            <circle cx={x(cross)} cy={y(main[cross].savedTotal)} r="5" fill={SAVED} stroke="#ffffff" strokeWidth="2" />
+            <text x={x(cross) + (x(cross) > W - 130 ? -8 : 8)} y={y(main[cross].savedTotal) - 8} textAnchor={x(cross) > W - 130 ? 'end' : 'start'} fontSize="11" fill="#0f172a">
+              Savings pass debt{paths.length > 1 ? ` (${paths[0].label.toLowerCase()})` : ''}
             </text>
           </g>
         )}
         {months.map((m, i) => (
           <rect
             key={m.month}
-            x={x(i) - plotW / Math.max(months.length - 1, 1) / 2}
+            x={x(i) - band / 2}
             y={PAD.top}
-            width={plotW / Math.max(months.length - 1, 1)}
+            width={band}
             height={plotH}
             fill="transparent"
             tabIndex={0}
             role="button"
-            aria-label={`${monthLabel(m.month)}: still owed ${formatPeso(m.owed)}, savings ${formatPeso(m.savedTotal)}`}
+            aria-label={`${monthLabel(m.month)}: ${paths.map((p) => `${p.label} still owed ${formatPeso(p.months[i]?.owed ?? 0)}, savings ${formatPeso(p.months[i]?.savedTotal ?? 0)}`).join('; ')}`}
             onPointerEnter={(e) => e.pointerType === 'mouse' && setActive(i)}
             onClick={() => setActive(i)}
             onFocus={() => setActive(i)}
@@ -96,19 +118,31 @@ export function PayoffChart({ months }: { months: PayoffMonth[] }) {
           />
         ))}
       </svg>
-      {sel && (
-        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-slate-50 p-3 text-sm" aria-live="polite">
-          <p className="col-span-2 text-slate-600">After the {monthLabel(sel.month)} bills</p>
-          <p className="flex justify-between">
-            <span className="text-slate-600">Still owed</span>
-            <b className="text-slate-900">{formatPeso(sel.owed)}</b>
-          </p>
-          <p className="flex justify-between">
-            <span className="text-slate-600">Savings</span>
-            <b className="text-slate-900">{formatPeso(sel.savedTotal)}</b>
-          </p>
-          {sel.carried > 0 && <p className="col-span-2 text-amber-900">! {formatPeso(sel.carried)} carried to the next bill</p>}
-          {sel.interest > 0 && <p className="col-span-2 text-slate-600">Interest this month (est.): {formatPeso(sel.interest)}</p>}
+      {months[active] && (
+        <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm" aria-live="polite">
+          <p className="text-slate-600">After the {monthLabel(months[active].month)} bills</p>
+          <table className="mt-1 w-full text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <thead className="text-xs text-slate-500">
+              <tr>
+                <th className="text-left font-normal">{paths.length > 1 ? 'Path' : ''}</th>
+                <th className="font-normal">Still owed</th>
+                <th className="font-normal">Savings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paths.map((p) => {
+                const m = p.months[active]
+                return (
+                  <tr key={p.key}>
+                    <td className="text-left text-slate-600">{paths.length > 1 ? p.label : ''}</td>
+                    <td className="font-semibold text-slate-900">{formatPeso(m.owed)}</td>
+                    <td className="font-semibold text-slate-900">{formatPeso(m.savedTotal)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {main[active]?.carried > 0 && <p className="mt-1 text-amber-900">! {formatPeso(main[active].carried)} carried to the next bill ({paths[0].label.toLowerCase()})</p>}
         </div>
       )}
       <details className="mt-2 text-sm">
@@ -118,22 +152,22 @@ export function PayoffChart({ months }: { months: PayoffMonth[] }) {
             <thead className="text-xs text-slate-500">
               <tr>
                 <th className="py-1 text-left font-normal">Month</th>
-                <th className="py-1 font-normal">Card bill</th>
-                <th className="py-1 font-normal">Carried</th>
-                <th className="py-1 font-normal">Interest</th>
-                <th className="py-1 font-normal">Saved</th>
-                <th className="py-1 font-normal">Still owed</th>
+                {paths.map((p) => (
+                  <th key={p.key} className="py-1 font-normal" colSpan={2}>
+                    {p.label}: owed · saved
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="text-slate-800">
-              {months.map((m) => (
+              {months.map((m, i) => (
                 <tr key={m.month} className="border-t border-slate-100">
                   <td className="py-1 text-left">{monthLabel(m.month)}</td>
-                  <td className="py-1">{formatPeso(m.cardBill)}</td>
-                  <td className="py-1">{formatPeso(m.carried)}</td>
-                  <td className="py-1">{formatPeso(m.interest)}</td>
-                  <td className="py-1">{formatPeso(m.saved)}</td>
-                  <td className="py-1">{formatPeso(m.owed)}</td>
+                  {paths.map((p) => (
+                    <td key={p.key} className="py-1" colSpan={2}>
+                      {formatPeso(p.months[i].owed)} · {formatPeso(p.months[i].savedTotal)}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

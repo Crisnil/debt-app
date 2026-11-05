@@ -20,6 +20,7 @@ export type TabName = keyof typeof TABS
 export const OPTIONAL_TABS = {
   Payables: ['payable_id', 'created_at', 'name', 'payee', 'category', 'amount', 'recurring', 'due_day', 'start_month', 'times', 'active', 'note'],
   PayableAmounts: ['entry_id', 'payable_id', 'month', 'amount', 'created_at'],
+  PlannedExpenses: ['item_id', 'name', 'amount', 'active', 'note'],
 } as const
 
 export type OptionalTab = keyof typeof OPTIONAL_TABS

@@ -1,4 +1,4 @@
-import type { IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
+import type { IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
 import { addTabs, appendRows, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
 import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
@@ -179,7 +179,26 @@ export function setPayableAmount(sheetId: string, payableId: string, month: stri
   return value
 }
 
+/** A line of the planned monthly expenses. */
+export function addPlannedExpense(sheetId: string, name: string, amount: Centavos): PlannedExpense {
+  const value: PlannedExpense = { itemId: newId(), name, amount, active: true, row: 0 }
+  enqueue(sheetId, {
+    key: value.itemId,
+    tab: 'PlannedExpenses',
+    record: { item_id: value.itemId, name, amount: pesos(amount), active: true, note: '' },
+    entity: { kind: 'plannedExpense', value },
+  })
+  return value
+}
+
 // ---- edits (online only) ----------------------------------------------------
+
+/** Changes a planned expense line, or removes it from the plan (active = false). */
+export async function savePlannedExpense(sheetId: string, wb: Workbook, row: number, edit: { name: string; amount: Centavos; active: boolean }, token: string) {
+  const h = wb.headers.PlannedExpenses
+  const cell = (column: string, value: CellValue) => ({ range: cellRange('PlannedExpenses', h, column, row), values: [[value]] })
+  await updateCells(sheetId, [cell('name', safeText(edit.name)), cell('amount', pesos(edit.amount)), cell('active', edit.active)], token)
+}
 
 /** Stops a payable: it no longer shows for new months. Months already paid stay. */
 export async function stopPayable(sheetId: string, wb: Workbook, row: number, token: string) {

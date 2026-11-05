@@ -4,7 +4,7 @@ import { daysBetween, todayIso } from '../../domain/dues'
 import { forecastCards, PAYABLES } from '../../domain/forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
 import { carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
-import { monthsUntil, payoffPath } from '../../domain/payoff'
+import { monthsUntil, payoffPaths } from '../../domain/payoff'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useLiveWorkbook, useSession } from '../../state/hooks'
@@ -312,7 +312,7 @@ export function HomeView({ workbook, today }: { workbook: Workbook; today: IsoDa
           </Link>
         </div>
       </div>
-      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPath(workbook, today).debtFree} />
+      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
       <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
       <Tiles workbook={workbook} forecasts={forecasts} today={today} />
