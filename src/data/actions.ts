@@ -3,7 +3,7 @@ import { addTabs, appendRows, quoteTab, updateCells, type CellValue } from '../g
 import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
 import { enqueue } from './outbox'
-import { cellRange, columnLetter, pesos, toRow } from './rows'
+import { cellRange, columnLetter, pesos, safeText, toRow } from './rows'
 import type { SheetUpdate } from './schema'
 
 const now = () => new Date().toISOString()
@@ -184,6 +184,26 @@ export function setPayableAmount(sheetId: string, payableId: string, month: stri
 /** Stops a payable: it no longer shows for new months. Months already paid stay. */
 export async function stopPayable(sheetId: string, wb: Workbook, row: number, token: string) {
   await updateCells(sheetId, [{ range: cellRange('Payables', wb.headers.Payables, 'active', row), values: [[false]] }], token)
+}
+
+export type PayableEdit = Pick<Payable, 'name' | 'payee' | 'category' | 'amount' | 'dueDay' | 'times'>
+
+/** Changes a payable in place (its row in the Payables tab). */
+export async function savePayable(sheetId: string, wb: Workbook, row: number, edit: PayableEdit, token: string) {
+  const h = wb.headers.Payables
+  const cell = (column: string, value: CellValue) => ({ range: cellRange('Payables', h, column, row), values: [[value]] })
+  await updateCells(
+    sheetId,
+    [
+      cell('name', safeText(edit.name)),
+      cell('payee', safeText(edit.payee)),
+      cell('category', safeText(edit.category)),
+      cell('amount', pesos(edit.amount)),
+      cell('due_day', edit.dueDay ?? ''),
+      cell('times', edit.times ?? ''),
+    ],
+    token,
+  )
 }
 
 /** Header cells to write for each update: from column A for a new tab, after the last header for an existing tab. */

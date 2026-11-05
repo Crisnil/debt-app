@@ -1,0 +1,111 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { parseWorkbook } from '../../data/workbook'
+import { billsThisMonth, monthsToKeep } from '../../domain/payables'
+import type { Payable, Transaction, Workbook } from '../../domain/types'
+import { SessionProvider } from '../../state/session'
+import { fixtureTabs, fixtureValues } from '../../test/fixtures'
+import { BillsView } from './BillsPage'
+
+const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
+
+const payable = (over: Partial<Payable>): Payable => ({
+  payableId: 'p',
+  name: 'Sample bill',
+  payee: '',
+  category: 'Utilities',
+  amount: 100000,
+  recurring: true,
+  dueDay: 20,
+  startMonth: '2030-01',
+  times: null,
+  active: true,
+  note: '',
+  row: 2,
+  ...over,
+})
+
+const paid = (payableId: string, month: string, amount: number): Transaction => ({
+  txnId: `${payableId}-${month}`,
+  date: `${month}-10`,
+  amount,
+  merchant: '',
+  category: 'Utilities',
+  methodId: 'cash',
+  note: '',
+  payableId,
+  payableMonth: month,
+})
+
+const wb: Workbook = {
+  ...base,
+  payables: [
+    payable({ payableId: 'elec', name: 'Sample electric' }),
+    payable({ payableId: 'water', name: 'Sample water', dueDay: 5, startMonth: '2030-03', row: 3 }),
+    payable({ payableId: 'old', name: 'Sample repair', recurring: false, startMonth: '2030-02', dueDay: 1, row: 4 }),
+    payable({ payableId: 'next', name: 'Sample future', startMonth: '2030-04', row: 5 }),
+  ],
+  transactions: [...base.transactions, paid('elec', '2030-01', 100000), paid('elec', '2030-02', 100000), paid('water', '2030-03', 100000)],
+}
+
+function renderBills(today = '2030-03-15') {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SessionProvider>
+        <MemoryRouter>
+          <BillsView sheetId="s" workbook={wb} today={today} />
+        </MemoryRouter>
+      </SessionProvider>
+    </QueryClientProvider>,
+  )
+}
+
+describe('Bills table', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('lists this month only, late ones first, and recurring payables come back each month', () => {
+    // March: electric (recurring, not paid yet), water (paid), and the one-time repair from February still unpaid.
+    expect(billsThisMonth(wb, '2030-03-15').map((m) => `${m.payable.payableId} ${m.month}`)).toEqual(['old 2030-02', 'water 2030-03', 'elec 2030-03'])
+    // April: the recurring ones come back for April; unpaid March electric and the February repair are late, first.
+    expect(billsThisMonth(wb, '2030-04-02').map((m) => `${m.payable.payableId} ${m.month}`)).toEqual([
+      'old 2030-02',
+      'elec 2030-03',
+      'water 2030-04',
+      'elec 2030-04',
+      'next 2030-04',
+    ])
+  })
+
+  it('shows one row per payable with Pay, Edit, and Delete, and no Pay once paid', () => {
+    renderBills()
+    const rows = screen.getAllByRole('listitem')
+    expect(rows).toHaveLength(3)
+    expect(within(rows[0]).getByText('▲ Late')).toBeInTheDocument()
+    const water = rows.find((r) => within(r).queryByText('Sample water'))!
+    expect(within(water).getByText('✓ Paid')).toBeInTheDocument()
+    expect(within(water).queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument()
+    const electric = rows.find((r) => within(r).queryByText('Sample electric'))!
+    expect(within(electric).getByRole('button', { name: 'Pay' })).toBeInTheDocument()
+    expect(within(electric).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByText('₱2,000.00')).toBeInTheDocument() // left this month: repair 1,000 + electric 1,000 (water is paid)
+  })
+
+  it('asks before deleting and says that past payments stay', async () => {
+    renderBills()
+    const electric = screen.getAllByRole('listitem').find((r) => within(r).queryByText('Sample electric'))!
+    await userEvent.click(within(electric).getByRole('button', { name: 'Delete' }))
+    expect(within(electric).getByRole('alertdialog', { name: 'Delete Sample electric' })).toHaveTextContent('Payments you already made stay in your records.')
+    await userEvent.click(within(electric).getByRole('button', { name: 'Cancel' }))
+    expect(within(electric).queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the amount of earlier paid months when the usual amount changes', () => {
+    expect(monthsToKeep(wb, wb.payables[0], '2030-03-15')).toEqual([
+      { month: '2030-01', amount: 100000 },
+      { month: '2030-02', amount: 100000 },
+    ])
+  })
+})

@@ -39,11 +39,21 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument()
   })
 
-  it('opens the expense form from the + button and hides the button there', async () => {
-    renderAt('/plan')
+  it('opens the + menu with three actions, closes it with Escape, and hides the button on the Add page', async () => {
+    renderAt('/')
+    const plus = screen.getByRole('button', { name: 'Add' })
+    expect(plus).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(plus)
+    expect(screen.getByRole('button', { name: 'Close add menu' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: 'Money received' })).toHaveAttribute('href', '/add/other?type=received')
+    expect(screen.getByRole('link', { name: 'Add savings' })).toHaveAttribute('href', '/add/other?type=save')
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('link', { name: 'Money received' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     await userEvent.click(screen.getByRole('link', { name: 'Add expense' }))
     expect(screen.getByRole('heading', { name: 'Add expense' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Add expense' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
   })
 
   it('sends old statement links to the card page', () => {

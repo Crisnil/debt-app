@@ -98,3 +98,21 @@ export function payablesByMonth(wb: Workbook, first: string, months: number): Ma
 export function isEwalletPayablePayment(wb: Workbook, t: Transaction): boolean {
   return Boolean(t.payableId) && wb.accounts.some((a) => a.accountId === t.methodId && a.type === 'e-wallet')
 }
+
+/** The Bills table: this month's payables, and earlier months still not paid (late) first. */
+export function billsThisMonth(wb: Workbook, today: IsoDate): PayableMonth[] {
+  const month = today.slice(0, 7)
+  const rows = payableMonths(wb, month).filter((m) => m.month === month || m.left > 0)
+  return rows.sort((a, b) => Number(b.month < month) - Number(a.month < month) || a.dueDate.localeCompare(b.dueDate))
+}
+
+/**
+ * Before the usual amount of a payable changes: earlier months with a payment keep the amount they had.
+ * Returns those months and amounts (to save as month amounts), so a paid month does not turn unpaid.
+ */
+export function monthsToKeep(wb: Workbook, p: Payable, today: IsoDate): { month: string; amount: Centavos }[] {
+  const month = today.slice(0, 7)
+  return payableMonths({ ...wb, payables: [p] }, addMonths(month, -1))
+    .filter((m) => m.paid > 0 && !m.amountSet)
+    .map((m) => ({ month: m.month, amount: m.amount }))
+}
