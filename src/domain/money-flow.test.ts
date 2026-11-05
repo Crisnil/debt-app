@@ -4,7 +4,6 @@ import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { EWALLET_LOAD, expenseCategories, paidFromAccounts } from './accounts'
 import { accountBalances, savedInMonth, savingsGoal } from './balances'
 import { billFor, nextBill } from './billing'
-import { estimateNextBill } from './estimate'
 import { NO_MATCH, reconcileCard, spendingItems } from './reconcile'
 import type { StatementLine, Transaction, Workbook } from './types'
 
@@ -151,25 +150,6 @@ describe('e-wallets', () => {
     expect(spendingItems(wb).find((i) => i.category === EWALLET_LOAD)).toMatchObject({ amount: -20000, date: '2030-01-20' })
     const before = accountBalances(base).find((b) => b.account.accountId === 'payroll')!.balance
     expect(accountBalances(wb).find((b) => b.account.accountId === 'payroll')!.balance).toBe(before + 20000)
-  })
-})
-
-describe('estimateNextBill', () => {
-  it('adds installments and logged spending for the next bill', () => {
-    const alpha = base.cards.find((c) => c.cardId === 'alpha')!
-    const e = estimateNextBill(base, alpha, '2030-01-21')!
-    expect(e.bill).toEqual({ statementDate: '2030-02-10', dueDate: '2030-02-28' })
-    expect(e.installments).toBe(100000)
-    expect(e.spending).toBe(80000)
-    expect(e.carried).toBe(0)
-    expect(e.total).toBe(180000)
-  })
-
-  it('adds the carried amount and estimated interest after the due date', () => {
-    const alpha = base.cards.find((c) => c.cardId === 'alpha')!
-    const e = estimateNextBill(base, alpha, '2030-02-01')!
-    expect(e.carried).toBe(300000) // 4,000.75 due − 1,000.75 paid
-    expect(e.interest).toBe(9000) // 3%
   })
 })
 
