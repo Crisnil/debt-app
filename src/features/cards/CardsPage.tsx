@@ -1,37 +1,40 @@
-import { Link } from 'react-router-dom'
+import { summarizeDues, todayIso } from '../../domain/dues'
+import { forecastCards } from '../../domain/forecast'
 import { reconcileCard } from '../../domain/reconcile'
+import { CreditUsedBar } from '../../ui/charts/CreditUsed'
 import { WithWorkbook } from '../WithWorkbook'
+import { CardRow } from './CardSummary'
 
+/** Each card: credit used, what is due, the next bill, and a link to its page. Soonest due first. */
 export function CardsPage() {
   return (
     <WithWorkbook title="Cards">
-      {(_, workbook) => (
-        <section className="max-w-2xl space-y-4">
-          <h1 className="text-2xl font-semibold text-slate-900">Cards</h1>
-          <ul className="space-y-2">
-            {workbook.cards
-              .filter((c) => c.active)
-              .map((card) => {
-                const r = reconcileCard(workbook, card.cardId)
-                const toCheck = r.probable.length + r.unlogged.length + r.notOnStatement.length
+      {(_, workbook) => {
+        const today = todayIso()
+        const dues = summarizeDues(workbook, today)
+        const forecasts = forecastCards(workbook, today)
+        return (
+          <section className="space-y-4">
+            <h1 className="text-2xl font-semibold text-slate-900">Cards</h1>
+            <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
+              {dues.cards.map((c) => {
+                const r = reconcileCard(workbook, c.card.cardId)
+                const forecast = forecasts.find((f) => f.card.cardId === c.card.cardId)
+                const next = forecast?.bills.find((b) => b.statementLeft === 0)
                 return (
-                  <li key={card.cardId}>
-                    <Link to={`/cards/${card.cardId}`} className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
-                      <span>
-                        <span className="font-medium text-slate-900">{card.name}</span>
-                        <span className="block text-sm text-slate-500">
-                          {r.latestStatement ? `Latest statement ${r.latestStatement}` : 'No statement lines yet'}
-                          {r.unbilled.length > 0 && ` · ${r.unbilled.length} not billed yet`}
-                        </span>
-                      </span>
-                      {toCheck > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-sm text-amber-900">{toCheck} to check</span>}
-                    </Link>
-                  </li>
+                  <CardRow key={c.card.cardId} c={c} next={next} toCheck={r.probable.length + r.unlogged.length + r.notOnStatement.length}>
+                    {forecast && (
+                      <div className="mt-3">
+                        <CreditUsedBar forecast={forecast} showName={false} />
+                      </div>
+                    )}
+                  </CardRow>
                 )
               })}
-          </ul>
-        </section>
-      )}
+            </ul>
+          </section>
+        )
+      }}
     </WithWorkbook>
   )
 }
