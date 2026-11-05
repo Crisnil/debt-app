@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
+import { EWALLET_LOAD, expenseCategories, paidFromAccounts } from './accounts'
 import { accountBalances, savedInMonth, savingsGoal } from './balances'
 import { billFor, nextBill } from './billing'
 import { estimateNextBill } from './estimate'
@@ -125,6 +126,31 @@ describe('spendingItems', () => {
     expect(grocer[0]).toMatchObject({ source: 'both', category: 'Grocery' })
     // beta fuel line (no expense) + cash cafe + unbilled pharmacy
     expect(items.map((i) => i.amount).sort((a, b) => a - b)).toEqual([15000, 80000, 120000, 250025])
+  })
+})
+
+describe('e-wallets', () => {
+  const wb: Workbook = {
+    ...base,
+    accounts: [...base.accounts, { ...base.accounts[0], accountId: 'gcash', label: 'GCash', type: 'e-wallet', isSavings: false, row: 99 }],
+    incomeLog: [
+      ...base.incomeLog,
+      { incomeId: 'c1', date: '2030-01-20', sourceId: 'gcash', type: 'ewallet_return', amount: 20000, toAccount: 'payroll', note: '' },
+    ],
+  }
+
+  it('leaves e-wallets out of "Paid from"', () => {
+    expect(paidFromAccounts(wb).map((a) => a.accountId)).toEqual(['payroll', 'piggy', 'cash', 'alpha', 'beta'])
+  })
+
+  it('always offers the e-wallet load category', () => {
+    expect(expenseCategories(wb)).toEqual(['Grocery', 'Gasoline', 'Food', EWALLET_LOAD])
+  })
+
+  it('counts a cash-out as less e-wallet spending and adds it to the bank balance', () => {
+    expect(spendingItems(wb).find((i) => i.category === EWALLET_LOAD)).toMatchObject({ amount: -20000, date: '2030-01-20' })
+    const before = accountBalances(base).find((b) => b.account.accountId === 'payroll')!.balance
+    expect(accountBalances(wb).find((b) => b.account.accountId === 'payroll')!.balance).toBe(before + 20000)
   })
 })
 

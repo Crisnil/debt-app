@@ -108,12 +108,14 @@ export type StatementLineInput = {
   termNo: number | null
   totalTerms: number | null
   category: string
+  /** Expense confirmed as the same purchase, or NO_MATCH. Saved in the txn_id column. */
+  linkedTxnId?: string
 }
 
 export function addStatementLine(sheetId: string, wb: Workbook, cardId: string, input: StatementLineInput): StatementLine {
   const card = wb.cards.find((c) => c.cardId === cardId)
   if (!card?.sheetTab) throw new Error('This card has no statement tab in the sheet (Cards → sheet_tab).')
-  const value: StatementLine = { cardId, row: 0, linkedTxnId: '', ...input }
+  const value: StatementLine = { cardId, row: 0, ...input, linkedTxnId: input.linkedTxnId ?? '' }
   enqueue(sheetId, {
     key: newId(),
     tab: card.sheetTab,
@@ -127,6 +129,7 @@ export function addStatementLine(sheetId: string, wb: Workbook, cardId: string, 
       term_no: input.termNo ?? '',
       total_terms: input.totalTerms ?? '',
       category: input.category,
+      txn_id: value.linkedTxnId,
     },
     entity: { kind: 'statementLine', value },
   })

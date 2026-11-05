@@ -1,10 +1,13 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { AddPage } from './features/add/AddPage'
+import { OtherEntriesPage } from './features/add/OtherEntriesPage'
+import { CardPage } from './features/cards/CardPage'
+import { CardsPage } from './features/cards/CardsPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { Placeholder } from './features/Placeholder'
-import { ReconcilePage } from './features/reconcile/ReconcilePage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { useSync } from './state/hooks'
+import { AddButton } from './ui/AddButton'
 import { MainNav } from './ui/MainNav'
 
 function SyncBar() {
@@ -23,6 +26,12 @@ function SyncBar() {
   )
 }
 
+/** Old "Check statement" links. */
+function ReconcileRedirect() {
+  const { cardId = '' } = useParams()
+  return <Navigate to={`/cards/${cardId}`} replace />
+}
+
 export default function App() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col lg:max-w-7xl lg:flex-row">
@@ -33,13 +42,17 @@ export default function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/add" element={<AddPage />} />
-            <Route path="/reconcile/:cardId" element={<ReconcilePage />} />
+            <Route path="/add/other" element={<OtherEntriesPage />} />
+            <Route path="/cards" element={<CardsPage />} />
+            <Route path="/cards/:cardId" element={<CardPage />} />
+            <Route path="/reconcile/:cardId" element={<ReconcileRedirect />} />
             <Route path="/purchases" element={<Placeholder title="Purchases" phase={5} detail="All purchases from every card and cash." />} />
             <Route path="/budget" element={<Placeholder title="Budget" phase={5} detail="This week per category vs. the weekly limit." />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <AddButton />
       </div>
     </div>
   )

@@ -39,6 +39,18 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: 'Budget' })).toBeInTheDocument()
   })
 
+  it('opens the expense form from the + button and hides the button there', async () => {
+    renderAt('/')
+    await userEvent.click(screen.getByRole('link', { name: 'Add expense' }))
+    expect(screen.getByRole('heading', { name: 'Add expense' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Add expense' })).not.toBeInTheDocument()
+  })
+
+  it('sends old statement links to the card page', () => {
+    renderAt('/reconcile/alpha')
+    expect(screen.getByRole('heading', { name: 'Card' })).toBeInTheDocument()
+  })
+
   it('redirects unknown paths to the dashboard', () => {
     renderAt('/nope')
     expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()

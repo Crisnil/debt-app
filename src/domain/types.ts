@@ -87,7 +87,8 @@ export type IncomeSource = {
   row: number
 }
 
-export type IncomeType = 'salary' | 'allowance' | 'bonus' | '13th_month' | 'side' | 'other'
+/** ewallet_return: money moved from an e-wallet back to a bank. Not income: it lowers "E-wallet load" spending. */
+export type IncomeType = 'salary' | 'allowance' | 'bonus' | '13th_month' | 'side' | 'other' | 'ewallet_return'
 
 export type IncomeEntry = {
   incomeId: string

@@ -1,12 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
 import { linkStatementLine } from '../../data/actions'
 import { NO_MATCH, reconcileCard } from '../../domain/reconcile'
-import type { StatementLine, Transaction } from '../../domain/types'
+import type { StatementLine, Transaction, Workbook } from '../../domain/types'
 import { currentToken } from '../../google/auth'
 import { formatPeso } from '../../lib/money'
-import { useLiveWorkbook, useSession } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 
@@ -39,28 +37,23 @@ function Section({ title, count, tone, children }: { title: string; count: numbe
   )
 }
 
-export function ReconcilePage() {
-  const { cardId = '' } = useParams()
-  const { sheet } = useSession()
-  const { workbook } = useLiveWorkbook()
+/** Matched, to-check, and not-billed purchases of one card. Links made here are saved right away (online only). */
+export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string; workbook: Workbook; cardId: string }) {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!sheet || !workbook) return <p className="text-slate-600">Reading your sheet…</p>
-  const card = workbook.cards.find((c) => c.cardId === cardId)
-  if (!card) return <p className="text-slate-600">Card not found.</p>
   const r = reconcileCard(workbook, cardId)
   const linkable = [...r.notOnStatement, ...r.unbilled]
 
   async function link(line: StatementLine, txnId: string) {
     const token = currentToken()
-    if (!token || !sheet || !workbook) return setError('Sign in again to save links.')
+    if (!token) return setError('Sign in again to save links.')
     setBusy(true)
     setError(null)
     try {
-      await linkStatementLine(sheet.id, workbook, line, txnId, token)
-      await queryClient.invalidateQueries({ queryKey: ['workbook', sheet.id] })
+      await linkStatementLine(sheetId, workbook, line, txnId, token)
+      await queryClient.invalidateQueries({ queryKey: ['workbook', sheetId] })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -69,11 +62,7 @@ export function ReconcilePage() {
   }
 
   return (
-    <section className="max-w-2xl space-y-4">
-      <Link to="/" className="text-sm text-green-900 underline">
-        ← Home
-      </Link>
-      <h1 className="text-2xl font-semibold text-slate-900">Check {card.name} statement</h1>
+    <div className="space-y-4">
       <p className="text-sm text-slate-600">
         Each purchase is counted once. Your expense and the same line on the statement are matched by card, amount, and date (±3 days).
         {r.latestStatement && ` Latest statement: ${r.latestStatement}.`}
@@ -167,6 +156,6 @@ export function ReconcilePage() {
           </li>
         ))}
       </Section>
-    </section>
+    </div>
   )
 }
