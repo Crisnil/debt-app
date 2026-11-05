@@ -1,3 +1,5 @@
+import type { Health } from '../../domain/health'
+
 // Chart colors. Checked with the dataviz palette validator (light surface): the first three slots pass
 // color-blind separation for every pair. Slot 3 (aqua) is below 3:1 contrast, so every chart that uses
 // these colors also has a legend and a table view. Colors follow the card (its order in the Cards tab), never its rank.
@@ -5,19 +7,17 @@ export const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#
 
 export const seriesColor = (index: number) => SERIES[index % SERIES.length]
 
-// Status colors: only for good / warning / critical, always with an icon and a word.
-export const STATUS = {
-  good: { fill: '#0ca30c', track: '#dcf1dc', icon: '✓', label: 'Low' },
-  warning: { fill: '#fab219', track: '#fdf0cf', icon: '!', label: 'Medium' },
-  critical: { fill: '#d03b3b', track: '#f6dada', icon: '▲', label: 'High' },
-} as const
-
-export type Status = keyof typeof STATUS
-
-/** Credit used: under 30% is good, under 70% is a warning, 70% and over is critical. */
-export function usedStatus(used: number): Status {
-  return used < 0.3 ? 'good' : used < 0.7 ? 'warning' : 'critical'
+// Status colors (good / watch / careful / bad = green / yellow / orange / red). Never used for a series.
+// Always shown with an icon and a word, so the meaning does not depend on color.
+export const STATUS: Record<Health, { fill: string; track: string; icon: string }> = {
+  good: { fill: '#0ca30c', track: '#dcf1dc', icon: '✓' },
+  watch: { fill: '#fab219', track: '#fdf0cf', icon: '!' },
+  careful: { fill: '#ec835a', track: '#fbe3d9', icon: '▲' },
+  bad: { fill: '#d03b3b', track: '#f6dada', icon: '▲' },
 }
+
+/** Words for credit used on one card. */
+export const USED_WORD: Record<Health, string> = { good: 'Low', watch: 'Medium', careful: 'High', bad: 'Very high' }
 
 /** "Nov 2026" from "2026-11". */
 export function monthLabel(month: string, withYear = true): string {

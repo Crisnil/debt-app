@@ -40,7 +40,7 @@ describe('App shell', () => {
   })
 
   it('opens the expense form from the + button and hides the button there', async () => {
-    renderAt('/')
+    renderAt('/plan')
     await userEvent.click(screen.getByRole('link', { name: 'Add expense' }))
     expect(screen.getByRole('heading', { name: 'Add expense' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Add expense' })).not.toBeInTheDocument()

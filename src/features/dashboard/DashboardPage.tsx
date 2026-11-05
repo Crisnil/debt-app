@@ -1,89 +1,25 @@
 import { Link } from 'react-router-dom'
-import { accountBalances, savedInMonth, savingsGoal } from '../../domain/balances'
 import { daysBetween, summarizeDues, todayIso } from '../../domain/dues'
-import { billsByMonth, forecastCards, withPayables, type CardForecast } from '../../domain/forecast'
-import { addMonths, payableMonths, payablesOwed } from '../../domain/payables'
+import { forecastCards, type CardForecast } from '../../domain/forecast'
+import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
+import { addMonths, payableMonths } from '../../domain/payables'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useLiveWorkbook, useSession } from '../../state/hooks'
 import { Button } from '../../ui/Button'
+import { Gauge } from '../../ui/charts/Gauge'
 import { monthLabel } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 
-/** Days ahead that "Due soon" looks at. */
-const DUE_SOON_DAYS = 14
+/** Days ahead that the "due soon" alert looks at. */
+const DUE_SOON_DAYS = 7
 
-const panel = 'rounded-xl bg-white p-4 shadow-sm'
-
-function TotalOwed({ forecasts, payables, leftNow, thisMonth }: { forecasts: CardForecast[]; payables: number; leftNow: number; thisMonth: { month: string; total: number } }) {
-  const owed = forecasts.reduce((s, f) => s + f.owed, 0)
-  const withLimit = forecasts.filter((f) => f.card.creditLimit)
-  const limit = withLimit.reduce((s, f) => s + f.card.creditLimit!, 0)
-  const usedOwed = withLimit.reduce((s, f) => s + f.owed, 0)
-  return (
-    <div className="rounded-xl bg-green-900 p-4 text-white">
-      <p className="text-sm text-green-100">Total owed on cards</p>
-      <p className="mt-1 text-5xl font-semibold tracking-tight">{formatPeso(owed)}</p>
-      <p className="mt-1 text-xs text-green-100">
-        Statement balance left + new charges + installments not billed yet{limit > 0 && ` · ${Math.round((usedOwed / limit) * 100)}% of your limits`}
-      </p>
-      <dl className="mt-3 grid grid-cols-2 gap-y-1 text-sm">
-        <dt className="text-green-100">Left to pay on current statements</dt>
-        <dd className="text-right font-medium">{formatPeso(leftNow)}</dd>
-        {payables > 0 && (
-          <>
-            <dt className="text-green-100">Bills and money owed (outside cards)</dt>
-            <dd className="text-right font-medium">{formatPeso(payables)}</dd>
-          </>
-        )}
-        <dt className="text-green-100">All bills due in {monthLabel(thisMonth.month)}</dt>
-        <dd className="text-right font-medium">{formatPeso(thisMonth.total)}</dd>
-      </dl>
-    </div>
-  )
-}
+const DEBT_WORD: Record<Health, string> = { good: 'Good', watch: 'Watch', careful: 'Careful', bad: 'Buried in debt' }
+const SAVINGS_WORD: Record<Health, string> = { good: 'On target', watch: 'Halfway', careful: 'Behind', bad: 'Far behind' }
+const SPENDING_WORD: Record<Health, string> = { good: 'On track', watch: 'Watch', careful: 'Over pace', bad: 'Overspending' }
 
 type DueItem = { key: string; name: string; detail: string; amount: number; dueDate: IsoDate; to: string }
-
-function dueWhen(days: number, date: IsoDate) {
-  if (days < 0) return `${-days} day${days === -1 ? '' : 's'} late (${date})`
-  if (days === 0) return `Due today (${date})`
-  if (days === 1) return `Due tomorrow (${date})`
-  return `Due in ${days} days (${date})`
-}
-
-/** Everything due in the next two weeks (and anything late), soonest first. */
-function DueSoon({ items, today }: { items: DueItem[]; today: IsoDate }) {
-  return (
-    <div className={panel}>
-      <h2 className="font-medium text-slate-900">Due in the next {DUE_SOON_DAYS} days</h2>
-      {items.length === 0 ? (
-        <p className="mt-1 text-sm text-slate-600">Nothing due. ✓</p>
-      ) : (
-        <ul className="mt-2 divide-y divide-slate-100 text-sm">
-          {items.map((item) => {
-            const days = daysBetween(today, item.dueDate)
-            return (
-              <li key={item.key}>
-                <Link to={item.to} className="flex items-baseline justify-between gap-2 py-2">
-                  <span>
-                    <span className="font-medium text-slate-900">{item.name}</span>
-                    <span className={`block text-xs ${days < 0 ? 'text-red-800' : 'text-slate-500'}`}>
-                      {days < 0 ? '▲ ' : ''}
-                      {dueWhen(days, item.dueDate)} · {item.detail}
-                    </span>
-                  </span>
-                  <b className="text-slate-900">{formatPeso(item.amount)}</b>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  )
-}
 
 function cardDueItems(workbook: Workbook, forecasts: CardForecast[], today: IsoDate): DueItem[] {
   const items: DueItem[] = []
@@ -122,47 +58,65 @@ function payableDueItems(workbook: Workbook, today: IsoDate): DueItem[] {
     }))
 }
 
-function SavingsCard({ workbook, month }: { workbook: Workbook; month: string }) {
-  const saved = savedInMonth(workbook, month)
-  const goal = savingsGoal(workbook, month)
-  const pct = goal > 0 ? Math.min(100, Math.max(0, Math.round((saved / goal) * 100))) : 0
+/** One line, only when something is late or due soon. Details are on Cards and Bills. */
+function DueAlert({ items, today }: { items: DueItem[]; today: IsoDate }) {
+  if (items.length === 0) return null
+  const late = items.filter((i) => i.dueDate < today)
+  const soon = items.filter((i) => i.dueDate >= today)
+  const names = [...new Set(items.map((i) => i.name))].join(', ')
+  const to = items.every((i) => i.to.startsWith('/cards')) ? '/cards' : items.every((i) => i.to === '/bills') ? '/bills' : '/cards'
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <div className="flex items-baseline justify-between">
-        <h2 className="font-medium text-slate-900">Savings this month</h2>
-        <Link to="/add/other?type=save" className="text-sm text-green-900 underline">
-          Add savings
-        </Link>
-      </div>
-      <p className="mt-1 text-sm text-slate-600">
-        {formatPeso(saved)} of {formatPeso(goal)} goal
-      </p>
-      <div className="mt-2 h-2 rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div className="h-2 rounded-full bg-green-700" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <Link to={to} className={`block rounded-xl p-3 text-sm ${late.length ? 'bg-red-50 text-red-900' : 'bg-amber-50 text-amber-900'}`}>
+      {late.length > 0 && <b>▲ {late.length} late</b>}
+      {late.length > 0 && soon.length > 0 && ' · '}
+      {soon.length > 0 && <b>{soon.length} due in {DUE_SOON_DAYS} days</b>}: {names} →
+    </Link>
   )
 }
 
-function AccountsCard({ workbook }: { workbook: Workbook }) {
-  const balances = accountBalances(workbook)
-  if (balances.length === 0) return null
-  const total = balances.reduce((s, b) => s + b.balance, 0)
+/** "▲ vs Oct": higher or lower than last month. Amounts are on the other pages. */
+const trendText = (now: number, before: number, month: string) => {
+  if (before === 0 && now === 0) return undefined
+  const arrow = now > before ? '▲ more' : now < before ? '▼ less' : '= same'
+  return `${arrow} than ${monthLabel(month, false)}`
+}
+
+function HealthGauges({ workbook, forecasts, today }: { workbook: Workbook; forecasts: CardForecast[]; today: IsoDate }) {
+  const debt = debtGauge(forecasts)
+  const savings = savingsGauge(workbook, today)
+  const spending = spendingGauge(workbook, today)
+  const last = addMonths(today.slice(0, 7), -1)
+  const debtH = debt.used === null ? null : debtHealth(debt.used)
+  const savingsH = savings.ratio === null ? null : savingsHealth(savings.ratio)
+  const spendingH = spending.ratio === null ? null : spendingHealth(spending.ratio)
   return (
-    <details className={panel}>
-      <summary className="flex cursor-pointer items-baseline justify-between">
-        <span className="font-medium text-slate-900">Money in accounts</span>
-        <b className="text-slate-900">{formatPeso(total)}</b>
-      </summary>
-      <dl className="mt-2 grid grid-cols-2 gap-y-1 text-sm">
-        {balances.map(({ account, balance }) => (
-          <div key={account.accountId} className="contents">
-            <dt className="text-slate-500">{account.label}</dt>
-            <dd className="text-right text-slate-800">{formatPeso(balance)}</dd>
-          </div>
-        ))}
-      </dl>
-    </details>
+    <div className="grid grid-cols-3 gap-2 lg:gap-4">
+      <Gauge
+        label="Debt used"
+        ratio={debt.used}
+        health={debtH}
+        word={debtH ? DEBT_WORD[debtH] : 'Add limits'}
+        detail={debt.used === null ? 'Set credit limits in Settings' : `of card limits`}
+        to={debt.used === null ? '/settings' : '/cards'}
+      />
+      <Gauge
+        label="Savings"
+        ratio={savings.ratio}
+        health={savingsH}
+        word={savingsH ? SAVINGS_WORD[savingsH] : 'Set a goal'}
+        detail={savings.ratio === null ? 'Set a goal in Settings' : 'of this month’s goal'}
+        trend={trendText(savings.saved, savings.lastMonth, last)}
+        to="/add/other?type=save"
+      />
+      <Gauge
+        label="Spending"
+        ratio={spending.ratio}
+        health={spendingH}
+        word={spendingH ? SPENDING_WORD[spendingH] : 'No budget'}
+        detail={spending.ratio === null ? 'Set weekly budgets in Categories' : `of ${spending.basis === 'budget' ? 'budget' : 'income'} so far`}
+        trend={trendText(spending.spent, spending.lastMonth, last)}
+      />
+    </div>
   )
 }
 
@@ -210,38 +164,22 @@ export function DashboardPage() {
   if (!workbook) return <p className="text-slate-600">Reading your sheet…</p>
 
   const today = todayIso()
-  const dues = summarizeDues(workbook, today)
   const forecasts = forecastCards(workbook, today)
-  const thisMonth = withPayables(billsByMonth(forecasts, today), workbook)[0]
   const due = [...cardDueItems(workbook, forecasts, today), ...payableDueItems(workbook, today)].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   return (
-    <section className="space-y-4">
+    <section className="mx-auto max-w-3xl space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
-        <div className="space-y-4">
-          <TotalOwed forecasts={forecasts} payables={payablesOwed(workbook, today)} leftNow={dues.totalRemainingDue} thisMonth={thisMonth} />
-          <DueSoon items={due} today={today} />
-        </div>
-        <div className="space-y-4">
-          <SavingsCard workbook={workbook} month={today.slice(0, 7)} />
-          <AccountsCard workbook={workbook} />
-          <p className="text-sm text-slate-600">
-            Card details are on{' '}
-            <Link to="/cards" className="text-green-900 underline">
-              Cards
-            </Link>
-            . Bills and money you owe are on{' '}
-            <Link to="/bills" className="text-green-900 underline">
-              Bills
-            </Link>
-            . The next 12 months are on{' '}
-            <Link to="/plan" className="text-green-900 underline">
-              Plan
-            </Link>
-            .
-          </p>
-        </div>
+      <p className="text-sm text-slate-600">How are we doing in {monthLabel(today.slice(0, 7))}?</p>
+      <HealthGauges workbook={workbook} forecasts={forecasts} today={today} />
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/add" className="rounded-xl bg-green-900 px-4 py-3 text-center font-medium text-white active:bg-green-800">
+          + Add expense
+        </Link>
+        <Link to="/add/other?type=save" className="rounded-xl border border-green-900 bg-white px-4 py-3 text-center font-medium text-green-900 active:bg-green-50">
+          + Add savings
+        </Link>
       </div>
+      <DueAlert items={due} today={today} />
     </section>
   )
 }
