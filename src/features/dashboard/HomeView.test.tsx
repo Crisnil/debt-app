@@ -29,6 +29,8 @@ describe('Home', () => {
     renderHome()
     expect(screen.getByRole('img', { name: 'Owed ₱10,799.25, savings ₱5,200.00' })).toBeInTheDocument()
     expect(screen.getByText('Savings cover 48% of what we owe')).toBeInTheDocument()
+    // The fixture's last installment is on the Apr 2030 bill and nothing is carried.
+    expect(screen.getByRole('link', { name: 'Debt-free Apr 2030 (3 months)' })).toHaveAttribute('href', '/plan')
     await userEvent.click(screen.getByRole('button', { name: '▸ Show details' }))
     expect(screen.getByText('Savings · Piggy Bank')).toBeInTheDocument()
   })

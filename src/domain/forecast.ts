@@ -84,7 +84,7 @@ export function installmentPlans(card: Card, lines: StatementLine[]): Installmen
     })
 }
 
-export function forecastCard(wb: Workbook, card: Card, today: IsoDate): CardForecast {
+export function forecastCard(wb: Workbook, card: Card, today: IsoDate, months = FORECAST_MONTHS): CardForecast {
   const lines = wb.lines.filter((l) => l.cardId === card.cardId)
   const summary = summarizeCard(wb, card, today)
   const snapshot = summary.snapshot
@@ -92,7 +92,7 @@ export function forecastCard(wb: Workbook, card: Card, today: IsoDate): CardFore
   const planStatement = latestDate(lines.filter((l) => l.type === 'installment' && l.termNo !== null).map((l) => l.statementDate))
   const unbilled = reconcileCard(wb, card.cardId).unbilled
   const usual = usualSpending(lines)
-  const lastMonth = month(today) + FORECAST_MONTHS - 1
+  const lastMonth = month(today) + months - 1
 
   // Bills after the latest statement with totals (snapshot), or after the latest statement lines.
   const anchor = snapshot?.asOf ?? statementDates(lines)[0] ?? null
@@ -134,8 +134,8 @@ export function forecastCard(wb: Workbook, card: Card, today: IsoDate): CardFore
   return { card, bills, plans, owed, used }
 }
 
-export function forecastCards(wb: Workbook, today: IsoDate): CardForecast[] {
-  return wb.cards.filter((c) => c.active).map((c) => forecastCard(wb, c, today))
+export function forecastCards(wb: Workbook, today: IsoDate, months = FORECAST_MONTHS): CardForecast[] {
+  return wb.cards.filter((c) => c.active).map((c) => forecastCard(wb, c, today, months))
 }
 
 export type MonthBills = {
@@ -149,9 +149,9 @@ export type MonthBills = {
 export const PAYABLES = 'payables'
 
 /** Bills grouped by due month (YYYY-MM): what you pay each month. Committed = everything except the usual-spending estimate. */
-export function billsByMonth(forecasts: CardForecast[], today: IsoDate): MonthBills[] {
+export function billsByMonth(forecasts: CardForecast[], today: IsoDate, count = FORECAST_MONTHS): MonthBills[] {
   const months: string[] = []
-  for (let i = 0; i < FORECAST_MONTHS; i++) {
+  for (let i = 0; i < count; i++) {
     const m = month(today) + i
     months.push(`${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}`)
   }
