@@ -75,7 +75,7 @@ function CardRow({ c, next, toCheck }: { c: CardSummary; next: NextBillEstimate 
           </dl>
         </div>
       )}
-      <Link to={`/reconcile/${c.card.cardId}`} className="mt-3 inline-block text-sm text-green-900 underline">
+      <Link to={`/cards/${c.card.cardId}`} className="mt-3 inline-block text-sm text-green-900 underline">
         Check statement{toCheck > 0 ? ` · ${toCheck} to check` : ''}
       </Link>
     </li>
@@ -90,8 +90,8 @@ function SavingsCard({ workbook, month }: { workbook: Workbook; month: string })
     <div className="rounded-xl bg-white p-4 shadow-sm">
       <div className="flex items-baseline justify-between">
         <h2 className="font-medium text-slate-900">Savings this month</h2>
-        <Link to="/add?type=move" className="text-sm text-green-900 underline">
-          Move money
+        <Link to="/add/other?type=save" className="text-sm text-green-900 underline">
+          Add savings
         </Link>
       </div>
       <p className="mt-1 text-sm text-slate-600">
@@ -168,12 +168,7 @@ export function DashboardPage() {
   const nextTotal = estimates.reduce((s, e) => s + (e?.total ?? 0), 0)
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-        <Link to="/add" className="rounded-lg bg-green-900 px-4 py-2 text-sm font-medium text-white">
-          + Add
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
       {/* Phones: one column in this order. Wide screens: summary, savings, accounts left; cards right. */}
       <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-6 lg:space-y-0">
         <div className="space-y-4">

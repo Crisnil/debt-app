@@ -1,4 +1,4 @@
-import { cardForMethod } from './accounts'
+import { cardForMethod, EWALLET_LOAD } from './accounts'
 import { billFor } from './billing'
 import { daysBetween } from './dues'
 import type { IsoDate, StatementLine, Transaction, Workbook } from './types'
@@ -118,7 +118,8 @@ export function reconcileCard(wb: Workbook, cardId: string): Reconciliation {
 /**
  * One purchase, one count. Card spending = every straight statement line (matched lines use the
  * expense's category) + logged card expenses not on any statement yet. Cash, bank, and e-wallet
- * expenses are always counted from the expense list.
+ * expenses are always counted from the expense list. A cash-out from an e-wallet back to a bank lowers
+ * "E-wallet load" spending (negative amount).
  */
 export type SpendingItem = { date: IsoDate; amount: number; category: string; label: string; methodId: string; source: 'expense' | 'statement' | 'both' }
 
@@ -139,6 +140,10 @@ export function spendingItems(wb: Workbook): SpendingItem[] {
   for (const t of wb.transactions) {
     if (cardForMethod(wb, t.methodId)) continue
     items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense' })
+  }
+  for (const i of wb.incomeLog) {
+    if (i.type !== 'ewallet_return') continue
+    items.push({ date: i.date, amount: -i.amount, category: EWALLET_LOAD, label: i.note || 'Cash-out from e-wallet', methodId: i.sourceId, source: 'expense' })
   }
   return items.sort((a, b) => b.date.localeCompare(a.date))
 }

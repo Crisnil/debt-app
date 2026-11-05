@@ -1,14 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { addStatementLine } from '../../data/actions'
-import { nextBill } from '../../domain/billing'
 import { todayIso } from '../../domain/dues'
+import { nextStatementDate } from '../../domain/statementPaste'
 import { formatForBank, parseStatementLine } from '../../domain/statementParser'
 import type { LineType, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { AmountInput, Chips, Field, Select, SuccessNote, TextInput } from '../../ui/form'
-import { parsePositiveAmount } from './parseAmount'
+import { parsePositiveAmount } from '../add/parseAmount'
 
 const types: { value: LineType; label: string }[] = [
   { value: 'straight', label: 'Purchase' },
@@ -21,12 +21,10 @@ const types: { value: LineType; label: string }[] = [
 
 const isCredit = (t: LineType) => t === 'payment' || t === 'credit'
 
-export function StatementLineForm({ sheetId, workbook }: { sheetId: string; workbook: Workbook }) {
-  const cards = workbook.cards.filter((c) => c.active && c.sheetTab)
-  const [cardId, setCardId] = useState(cards[0]?.cardId ?? '')
-  const card = cards.find((c) => c.cardId === cardId)
-  const latest = workbook.lines.filter((l) => l.cardId === cardId).reduce((max, l) => (l.statementDate > max ? l.statementDate : max), '')
-  const [statementDate, setStatementDate] = useState(() => (card && latest ? (nextBill(card, latest)?.statementDate ?? todayIso()) : todayIso()))
+/** One statement line typed by hand, for a line the paste reader cannot read. */
+export function StatementLineForm({ sheetId, workbook, cardId }: { sheetId: string; workbook: Workbook; cardId: string }) {
+  const card = workbook.cards.find((c) => c.cardId === cardId)
+  const [statementDate, setStatementDate] = useState(() => (card ? nextStatementDate(workbook, card) : todayIso()))
   const [raw, setRaw] = useState('')
   const [postDate, setPostDate] = useState('')
   const [txnDate, setTxnDate] = useState('')
@@ -38,13 +36,6 @@ export function StatementLineForm({ sheetId, workbook }: { sheetId: string; work
   const [category, setCategory] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
-
-  function pickCard(id: string) {
-    setCardId(id)
-    const c = cards.find((x) => x.cardId === id)
-    const last = workbook.lines.filter((l) => l.cardId === id).reduce((max, l) => (l.statementDate > max ? l.statementDate : max), '')
-    if (c && last) setStatementDate(nextBill(c, last)?.statementDate ?? statementDate)
-  }
 
   function readPasted() {
     const parsed = parseStatementLine(raw, formatForBank(card?.bank ?? ''), statementDate)
@@ -94,7 +85,6 @@ export function StatementLineForm({ sheetId, workbook }: { sheetId: string; work
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <Chips label="Card" options={cards.map((c) => ({ value: c.cardId, label: c.name }))} value={cardId} onChange={pickCard} />
       <Field label="Statement date (cut-off)" htmlFor="sl-stmt">
         <TextInput id="sl-stmt" type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
       </Field>

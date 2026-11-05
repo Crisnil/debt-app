@@ -5,7 +5,7 @@ import { checkHeaders, checkTabs, STATEMENT_TAB_HEADERS, TABS, type SchemaProble
 
 const LINE_TYPES = new Set<LineType>(['installment', 'straight', 'payment', 'interest', 'fee', 'credit'])
 const ACCOUNT_TYPES = new Set<AccountType>(['credit_card', 'bank', 'e-wallet', 'cash'])
-const INCOME_TYPES = new Set<IncomeType>(['salary', 'allowance', 'bonus', '13th_month', 'side', 'other'])
+const INCOME_TYPES = new Set<IncomeType>(['salary', 'allowance', 'bonus', '13th_month', 'side', 'other', 'ewallet_return'])
 
 export class SchemaError extends Error {
   readonly problems: SchemaProblem[]

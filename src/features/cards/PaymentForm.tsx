@@ -7,13 +7,11 @@ import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
-import { parsePositiveAmount } from './parseAmount'
+import { parsePositiveAmount } from '../add/parseAmount'
 
-export function PaymentForm({ sheetId, workbook }: { sheetId: string; workbook: Workbook }) {
-  const cards = workbook.cards.filter((c) => c.active)
+export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; workbook: Workbook; cardId: string }) {
   const accounts = moneyAccounts(workbook).filter((a) => a.active)
   const salaryAccount = workbook.incomeSources.find((s) => s.sourceId === 'salary')?.toAccount
-  const [cardId, setCardId] = useState(cards[0]?.cardId ?? '')
   const [from, setFrom] = useState(salaryAccount || accounts[0]?.accountId || '')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayIso())
@@ -21,7 +19,7 @@ export function PaymentForm({ sheetId, workbook }: { sheetId: string; workbook: 
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
-  const card = cards.find((c) => c.cardId === cardId)
+  const card = workbook.cards.find((c) => c.cardId === cardId)
   const summary = card ? summarizeCard(workbook, card, todayIso()) : null
 
   function submit(e: FormEvent) {
@@ -38,7 +36,6 @@ export function PaymentForm({ sheetId, workbook }: { sheetId: string; workbook: 
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <Chips label="Card" options={cards.map((c) => ({ value: c.cardId, label: c.name }))} value={cardId} onChange={setCardId} />
       {summary?.snapshot && (
         <div className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
           Left on the {summary.snapshot.asOf} statement: <b>{formatPeso(summary.remainingDue)}</b> (due {summary.snapshot.dueDate}). Minimum{' '}
