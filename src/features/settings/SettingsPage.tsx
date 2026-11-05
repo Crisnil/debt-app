@@ -6,6 +6,7 @@ import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 import { InstallCard, MoneySettings } from './MoneySettings'
+import { SheetUpdateCard } from './SheetUpdateCard'
 
 export function SettingsPage() {
   const { signedIn, sheet, signIn, signOut, chooseSheet, forgetSheet } = useSession()
@@ -111,12 +112,14 @@ export function SettingsPage() {
                   <li>✓ {workbook.data.transactions.length} expenses</li>
                   <li>✓ {workbook.data.transfers.length} money moves</li>
                   <li>✓ {workbook.data.incomeLog.length} income entries</li>
+                  <li>✓ {workbook.data.payables.length} payables</li>
                 </ul>
               )}
             </div>
           )}
         </div>
         <div className="space-y-6">
+          {sheet && signedIn && workbook.data && <SheetUpdateCard workbook={workbook.data} why="New features need these parts. Until then, those features stay off." />}
           {sheet && signedIn && workbook.data && <MoneySettings workbook={workbook.data} />}
           <InstallCard />
         </div>

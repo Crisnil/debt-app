@@ -10,7 +10,7 @@ export function AddPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Add expense</h1>
           <ExpenseForm sheetId={sheetId} workbook={workbook} />
           <p className="text-sm text-slate-600">
-            Income, savings, or GCash back to the bank?{' '}
+            Income, money received, savings, or GCash back to the bank?{' '}
             <Link to="/add/other" className="text-green-900 underline">
               Other entries
             </Link>

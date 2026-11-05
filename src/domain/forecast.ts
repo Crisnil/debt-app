@@ -1,5 +1,6 @@
 import type { Centavos } from '../lib/money'
 import { billFor, nextBill, type Bill } from './billing'
+import { payablesByMonth } from './payables'
 import { summarizeCard } from './dues'
 import { reconcileCard } from './reconcile'
 import type { Card, IsoDate, StatementLine, Workbook } from './types'
@@ -135,7 +136,15 @@ export function forecastCards(wb: Workbook, today: IsoDate): CardForecast[] {
   return wb.cards.filter((c) => c.active).map((c) => forecastCard(wb, c, today))
 }
 
-export type MonthBills = { month: string; byCard: { cardId: string; committed: Centavos; estimate: Centavos; bills: BillForecast[] }[]; total: Centavos }
+export type MonthBills = {
+  month: string
+  /** One entry per card, plus one for payables (cardId PAYABLES) when added with withPayables. */
+  byCard: { cardId: string; committed: Centavos; estimate: Centavos; bills: BillForecast[]; items?: { label: string; amount: Centavos }[] }[]
+  total: Centavos
+}
+
+/** Series id of bills and money owed outside the cards. */
+export const PAYABLES = 'payables'
 
 /** Bills grouped by due month (YYYY-MM): what you pay each month. Committed = everything except the usual-spending estimate. */
 export function billsByMonth(forecasts: CardForecast[], today: IsoDate): MonthBills[] {
@@ -171,4 +180,15 @@ export function installmentsEnding(forecasts: CardForecast[]): PlanEnding[] {
 /** Recurring income in the plan per month. */
 export function monthlyIncome(wb: Workbook): Centavos {
   return sum(wb.incomeSources.filter((s) => s.active && s.inPlan).map((s) => s.amount * (s.frequency === 'per_payday' ? s.days.length : 1)))
+}
+
+/** Adds what is left on payables (bills, money owed) to each month. Late payables count in the first month. */
+export function withPayables(months: MonthBills[], wb: Workbook): MonthBills[] {
+  if (months.length === 0) return months
+  const byMonth = payablesByMonth(wb, months[0].month, months.length)
+  return months.map((m) => {
+    const items = (byMonth.get(m.month) ?? []).map((p) => ({ label: p.payable.name, amount: p.left }))
+    const committed = sum(items.map((i) => i.amount))
+    return { ...m, byCard: [...m.byCard, { cardId: PAYABLES, committed, estimate: 0, bills: [], items }], total: m.total + committed }
+  })
 }

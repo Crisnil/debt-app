@@ -1,5 +1,5 @@
 import { todayIso } from '../../domain/dues'
-import { billsByMonth, forecastCards, installmentsEnding, monthlyIncome, type CardForecast } from '../../domain/forecast'
+import { billsByMonth, forecastCards, installmentsEnding, monthlyIncome, PAYABLES, withPayables, type CardForecast } from '../../domain/forecast'
 import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { FutureBillsChart } from '../../ui/charts/FutureBillsChart'
@@ -9,12 +9,13 @@ import { WithWorkbook } from '../WithWorkbook'
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
 
 function FutureBillsCard({ workbook, forecasts, today }: { workbook: Workbook; forecasts: CardForecast[]; today: string }) {
-  const months = billsByMonth(forecasts, today)
+  const months = withPayables(billsByMonth(forecasts, today), workbook)
+  const series = [...forecasts.map((f) => ({ cardId: f.card.cardId, name: f.card.name })), { cardId: PAYABLES, name: 'Bills & payables' }]
   return (
     <div className={panel}>
       <h2 className="font-medium text-slate-900">Bills in the next 12 months</h2>
-      <p className="mb-3 text-xs text-slate-500">By due month. Later months use your usual spending from the last 3 statements. Tap a month for details.</p>
-      <FutureBillsChart months={months} series={forecasts.map((f) => ({ cardId: f.card.cardId, name: f.card.name }))} income={monthlyIncome(workbook)} />
+      <p className="mb-3 text-xs text-slate-500">By due month: cards, bills, and money you owe. Later card bills use your usual spending from the last 3 statements. Tap a month for details.</p>
+      <FutureBillsChart months={months} series={series} income={monthlyIncome(workbook)} />
     </div>
   )
 }

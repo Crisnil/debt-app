@@ -1,15 +1,16 @@
-import type { IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
-import { appendRows, updateCells, type CellValue } from '../google/sheetsApi'
+import type { IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
+import { addTabs, appendRows, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
 import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
 import { enqueue } from './outbox'
-import { cellRange, pesos, toRow } from './rows'
+import { cellRange, columnLetter, pesos, toRow } from './rows'
+import type { SheetUpdate } from './schema'
 
 const now = () => new Date().toISOString()
 
 // ---- new rows (queued, work offline) ----------------------------------------
 
-export type ExpenseInput = { date: IsoDate; amount: Centavos; merchant: string; category: string; methodId: string; note: string }
+export type ExpenseInput = { date: IsoDate; amount: Centavos; merchant: string; category: string; methodId: string; note: string; payableId?: string; payableMonth?: string }
 
 export function addExpense(sheetId: string, input: ExpenseInput): Transaction {
   const value: Transaction = { txnId: newId(), ...input }
@@ -26,6 +27,9 @@ export function addExpense(sheetId: string, input: ExpenseInput): Transaction {
       method_id: value.methodId,
       note: value.note,
       source: 'app',
+      payable_id: value.payableId ?? '',
+      // Apostrophe: keep "2026-11" as text, not a date.
+      payable_month: value.payableMonth ? `'${value.payableMonth}` : '',
     },
     entity: { kind: 'expense', value },
   })
@@ -136,7 +140,66 @@ export function addStatementLine(sheetId: string, wb: Workbook, cardId: string, 
   return value
 }
 
+export type PayableInput = Omit<Payable, 'payableId' | 'row' | 'active'>
+
+export function addPayable(sheetId: string, input: PayableInput): Payable {
+  const value: Payable = { payableId: newId(), ...input, active: true, row: 0 }
+  enqueue(sheetId, {
+    key: value.payableId,
+    tab: 'Payables',
+    record: {
+      payable_id: value.payableId,
+      created_at: now(),
+      name: value.name,
+      payee: value.payee,
+      category: value.category,
+      amount: pesos(value.amount),
+      recurring: value.recurring,
+      due_day: value.dueDay ?? '',
+      start_month: `'${value.startMonth}`,
+      times: value.times ?? '',
+      active: true,
+      note: value.note,
+    },
+    entity: { kind: 'payable', value },
+  })
+  return value
+}
+
+/** The real amount of a recurring payable for one month. The newest row for a month wins. */
+export function setPayableAmount(sheetId: string, payableId: string, month: string, amount: Centavos): PayableAmount {
+  const value: PayableAmount = { payableId, month, amount, createdAt: now() }
+  const entryId = newId()
+  enqueue(sheetId, {
+    key: entryId,
+    tab: 'PayableAmounts',
+    record: { entry_id: entryId, payable_id: payableId, month: `'${month}`, amount: pesos(amount), created_at: value.createdAt },
+    entity: { kind: 'payableAmount', value },
+  })
+  return value
+}
+
 // ---- edits (online only) ----------------------------------------------------
+
+/** Stops a payable: it no longer shows for new months. Months already paid stay. */
+export async function stopPayable(sheetId: string, wb: Workbook, row: number, token: string) {
+  await updateCells(sheetId, [{ range: cellRange('Payables', wb.headers.Payables, 'active', row), values: [[false]] }], token)
+}
+
+/** Header cells to write for each update: from column A for a new tab, after the last header for an existing tab. */
+export function sheetUpdateCells(headers: Record<string, string[]>, updates: SheetUpdate[]): { range: string; values: CellValue[][] }[] {
+  return updates.map((u) => {
+    const start = u.create ? 0 : (headers[u.tab]?.length ?? 0)
+    return { range: `${quoteTab(u.tab)}!${columnLetter(start)}1:${columnLetter(start + u.columns.length - 1)}1`, values: [u.columns] }
+  })
+}
+
+/** Adds missing tabs with their header row, and missing columns at the end of header rows. Never changes data rows. */
+export async function applySheetUpdates(sheetId: string, wb: Workbook, updates: SheetUpdate[], token: string) {
+  await addTabs(sheetId, updates.filter((u) => u.create).map((u) => u.tab), token)
+  const cells = sheetUpdateCells(wb.headers, updates)
+  if (cells.length) await updateCells(sheetId, cells, token)
+}
 
 /** Links a statement line to an expense (or clears the link with ''). */
 export async function linkStatementLine(sheetId: string, wb: Workbook, line: StatementLine, txnId: string, token: string) {

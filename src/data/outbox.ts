@@ -1,4 +1,4 @@
-import type { IncomeEntry, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
+import type { IncomeEntry, Payable, PayableAmount, Payment, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
 import { appendRows, getTabValues, type CellValue } from '../google/sheetsApi'
 import { isoDate, rowsToObjects, text } from './cells'
 import { toRow } from './rows'
@@ -9,6 +9,8 @@ export type OutboxItem =
   | { key: string; tab: 'Transfers'; record: Record<string, CellValue>; entity: { kind: 'transfer'; value: Transfer } }
   | { key: string; tab: 'Payments'; record: Record<string, CellValue>; entity: { kind: 'payment'; value: Payment } }
   | { key: string; tab: 'IncomeLog'; record: Record<string, CellValue>; entity: { kind: 'income'; value: IncomeEntry } }
+  | { key: string; tab: 'Payables'; record: Record<string, CellValue>; entity: { kind: 'payable'; value: Payable } }
+  | { key: string; tab: 'PayableAmounts'; record: Record<string, CellValue>; entity: { kind: 'payableAmount'; value: PayableAmount } }
   | { key: string; tab: string; record: Record<string, CellValue>; entity: { kind: 'statementLine'; value: StatementLine } }
 
 /** Column that holds the unique key of each tab. Statement tabs have no ID column, so a content key is used. */
@@ -17,6 +19,8 @@ const ID_COLUMN: Record<string, string> = {
   Transfers: 'transfer_id',
   Payments: 'pay_id',
   IncomeLog: 'income_id',
+  Payables: 'payable_id',
+  PayableAmounts: 'entry_id',
 }
 
 export function statementLineKey(r: { statement_date?: unknown; post_date?: unknown; description?: unknown; amount?: unknown }): string {
@@ -110,12 +114,16 @@ export function mergeOutbox(workbook: Workbook, items: OutboxItem[]): Workbook {
     payments: [...workbook.payments],
     incomeLog: [...workbook.incomeLog],
     lines: [...workbook.lines],
+    payables: [...workbook.payables],
+    payableAmounts: [...workbook.payableAmounts],
   }
   for (const { entity } of items) {
     if (entity.kind === 'expense') wb.transactions.push(entity.value)
     else if (entity.kind === 'transfer') wb.transfers.push(entity.value)
     else if (entity.kind === 'payment') wb.payments.push(entity.value)
     else if (entity.kind === 'income') wb.incomeLog.push(entity.value)
+    else if (entity.kind === 'payable') wb.payables.push(entity.value)
+    else if (entity.kind === 'payableAmount') wb.payableAmounts.push(entity.value)
     else wb.lines.push(entity.value)
   }
   return wb

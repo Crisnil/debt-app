@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { accountBalances, savedInMonth, savingsGoal } from '../../domain/balances'
 import { daysBetween, summarizeDues, todayIso } from '../../domain/dues'
-import { billsByMonth, forecastCards, type CardForecast } from '../../domain/forecast'
+import { billsByMonth, forecastCards, withPayables, type CardForecast } from '../../domain/forecast'
+import { addMonths, payableMonths, payablesOwed } from '../../domain/payables'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useLiveWorkbook, useSession } from '../../state/hooks'
@@ -15,7 +16,7 @@ const DUE_SOON_DAYS = 14
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
 
-function TotalOwed({ forecasts, leftNow, thisMonth }: { forecasts: CardForecast[]; leftNow: number; thisMonth: { month: string; total: number } }) {
+function TotalOwed({ forecasts, payables, leftNow, thisMonth }: { forecasts: CardForecast[]; payables: number; leftNow: number; thisMonth: { month: string; total: number } }) {
   const owed = forecasts.reduce((s, f) => s + f.owed, 0)
   const withLimit = forecasts.filter((f) => f.card.creditLimit)
   const limit = withLimit.reduce((s, f) => s + f.card.creditLimit!, 0)
@@ -30,7 +31,13 @@ function TotalOwed({ forecasts, leftNow, thisMonth }: { forecasts: CardForecast[
       <dl className="mt-3 grid grid-cols-2 gap-y-1 text-sm">
         <dt className="text-green-100">Left to pay on current statements</dt>
         <dd className="text-right font-medium">{formatPeso(leftNow)}</dd>
-        <dt className="text-green-100">Bills due in {monthLabel(thisMonth.month)}</dt>
+        {payables > 0 && (
+          <>
+            <dt className="text-green-100">Bills and money owed (outside cards)</dt>
+            <dd className="text-right font-medium">{formatPeso(payables)}</dd>
+          </>
+        )}
+        <dt className="text-green-100">All bills due in {monthLabel(thisMonth.month)}</dt>
         <dd className="text-right font-medium">{formatPeso(thisMonth.total)}</dd>
       </dl>
     </div>
@@ -100,6 +107,19 @@ function cardDueItems(workbook: Workbook, forecasts: CardForecast[], today: IsoD
     }
   }
   return items
+}
+
+function payableDueItems(workbook: Workbook, today: IsoDate): DueItem[] {
+  return payableMonths(workbook, addMonths(today.slice(0, 7), 1))
+    .filter((m) => m.left > 0 && daysBetween(today, m.dueDate) <= DUE_SOON_DAYS)
+    .map((m) => ({
+      key: `${m.payable.payableId}-${m.month}`,
+      name: m.payable.name,
+      detail: m.paid > 0 ? `${formatPeso(m.paid)} paid` : m.payable.payee || m.payable.category,
+      amount: m.left,
+      dueDate: m.dueDate,
+      to: '/bills',
+    }))
 }
 
 function SavingsCard({ workbook, month }: { workbook: Workbook; month: string }) {
@@ -192,14 +212,14 @@ export function DashboardPage() {
   const today = todayIso()
   const dues = summarizeDues(workbook, today)
   const forecasts = forecastCards(workbook, today)
-  const thisMonth = billsByMonth(forecasts, today)[0]
-  const due = cardDueItems(workbook, forecasts, today).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const thisMonth = withPayables(billsByMonth(forecasts, today), workbook)[0]
+  const due = [...cardDueItems(workbook, forecasts, today), ...payableDueItems(workbook, today)].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
         <div className="space-y-4">
-          <TotalOwed forecasts={forecasts} leftNow={dues.totalRemainingDue} thisMonth={thisMonth} />
+          <TotalOwed forecasts={forecasts} payables={payablesOwed(workbook, today)} leftNow={dues.totalRemainingDue} thisMonth={thisMonth} />
           <DueSoon items={due} today={today} />
         </div>
         <div className="space-y-4">
@@ -210,7 +230,11 @@ export function DashboardPage() {
             <Link to="/cards" className="text-green-900 underline">
               Cards
             </Link>
-            . Bills for the next 12 months are on{' '}
+            . Bills and money you owe are on{' '}
+            <Link to="/bills" className="text-green-900 underline">
+              Bills
+            </Link>
+            . The next 12 months are on{' '}
             <Link to="/plan" className="text-green-900 underline">
               Plan
             </Link>
