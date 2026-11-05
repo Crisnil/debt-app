@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { addExpense, addPayable, setPayableAmount } from '../../data/actions'
+import { addExpense, addPayable, savePayable, setPayableAmount } from '../../data/actions'
 import { accountLabel, cardForMethod, expenseCategories } from '../../domain/accounts'
 import { billFor } from '../../domain/billing'
 import { todayIso } from '../../domain/dues'
-import { PAYABLE_CATEGORIES, type PayableMonth } from '../../domain/payables'
+import { monthsToKeep, PAYABLE_CATEGORIES, type PayableMonth } from '../../domain/payables'
 import type { Workbook } from '../../domain/types'
-import { formatPeso, toPesos } from '../../lib/money'
+import { toPesos } from '../../lib/money'
+import { useSheetEdit } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
@@ -66,31 +67,86 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
   )
 }
 
-/** The real amount of a recurring bill for one month (for example, this month's electric bill). */
-export function SetAmountForm({ sheetId, item, onDone }: { sheetId: string; item: PayableMonth; onDone: () => void }) {
-  const [amount, setAmount] = useState(toPesos(item.amount).toFixed(2))
-  const [error, setError] = useState<string | null>(null)
+/**
+ * Edit a payable: name, pay to, category, usual amount, due day, times, and (recurring, this month) this month's amount.
+ * Changes count from this month on: earlier months with a payment keep their amount, so they stay paid.
+ */
+export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook; item: PayableMonth; onDone: () => void }) {
+  const p = item.payable
+  const edit = useSheetEdit()
+  const categories = [...new Set([p.category, ...PAYABLE_CATEGORIES, ...expenseCategories(workbook)].filter(Boolean))]
+  const thisMonth = todayIso().slice(0, 7)
+  const showMonth = p.recurring && item.month === thisMonth
+  const [name, setName] = useState(p.name)
+  const [payee, setPayee] = useState(p.payee)
+  const [category, setCategory] = useState(p.category)
+  const [amount, setAmount] = useState(toPesos(p.amount).toFixed(2))
+  const [monthAmount, setMonthAmount] = useState(toPesos(item.amount).toFixed(2))
+  const [dueDay, setDueDay] = useState(p.dueDay?.toString() ?? '')
+  const [times, setTimes] = useState(p.times?.toString() ?? '')
+  const id = `${p.payableId}-${item.month}`
 
-  function submit(e: FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault()
-    const cents = parsePositiveAmount(amount)
-    if (cents === null) return setError('Enter an amount more than 0.')
-    setPayableAmount(sheetId, item.payable.payableId, item.month, cents)
-    onDone()
+    const usual = parsePositiveAmount(amount)
+    const forMonth = showMonth ? parsePositiveAmount(monthAmount) : usual
+    const day = dueDay.trim() ? Number(dueDay) : null
+    const count = p.recurring && times.trim() ? Number(times) : null
+    if (!name.trim()) return edit.fail('Enter a name.')
+    if (usual === null || forMonth === null) return edit.fail('Enter amounts more than 0.')
+    if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return edit.fail('Enter a due day from 1 to 31.')
+    if (count !== null && (!Number.isInteger(count) || count < 1)) return edit.fail('Enter how many times as a whole number, or leave it empty.')
+    void edit.run(`Saved ${name.trim()}.`, async (sheetId, wb, token) => {
+      if (usual !== p.amount) for (const keep of monthsToKeep(workbook, p, todayIso())) setPayableAmount(sheetId, p.payableId, keep.month, keep.amount)
+      await savePayable(sheetId, wb, p.row, { name: name.trim(), payee: payee.trim(), category, amount: usual, dueDay: day, times: count }, token)
+      // This month's amount after the save would be the one set before, or else the new usual amount.
+      const wouldBe = item.amountSet ? item.amount : usual
+      if (showMonth && forMonth !== wouldBe) setPayableAmount(sheetId, p.payableId, item.month, forMonth)
+      onDone()
+    })
   }
 
   return (
-    <form onSubmit={submit} className="mt-2 space-y-3 rounded-lg bg-slate-50 p-3" noValidate>
-      <Field label={`Amount for this month (₱) · usual ${formatPeso(item.payable.amount)}`} htmlFor={`set-${item.payable.payableId}-${item.month}`}>
-        <AmountInput id={`set-${item.payable.payableId}-${item.month}`} value={amount} onChange={(e) => setAmount(e.target.value)} />
-      </Field>
+    <form onSubmit={save} className="mt-2 space-y-3 rounded-lg bg-slate-50 p-3" noValidate>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Name" htmlFor={`ed-name-${id}`}>
+          <TextInput id={`ed-name-${id}`} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Pay to" htmlFor={`ed-payee-${id}`}>
+          <TextInput id={`ed-payee-${id}`} value={payee} onChange={(e) => setPayee(e.target.value)} />
+        </Field>
+      </div>
+      <Chips label="Category" options={categories.map((c) => ({ value: c, label: c }))} value={category} onChange={setCategory} />
+      <div className="grid grid-cols-2 gap-2">
+        <Field label={p.recurring ? 'Usual amount (₱)' : 'Amount (₱)'} htmlFor={`ed-amount-${id}`}>
+          <TextInput id={`ed-amount-${id}`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        {showMonth && (
+          <Field label="This month (₱)" htmlFor={`ed-month-${id}`} hint="For a bill that changes">
+            <TextInput id={`ed-month-${id}`} inputMode="decimal" value={monthAmount} onChange={(e) => setMonthAmount(e.target.value)} />
+          </Field>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Due day" htmlFor={`ed-day-${id}`} hint="Empty = end of month">
+          <TextInput id={`ed-day-${id}`} inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
+        </Field>
+        {p.recurring && (
+          <Field label="How many times" htmlFor={`ed-times-${id}`} hint="Empty = no end">
+            <TextInput id={`ed-times-${id}`} inputMode="numeric" value={times} onChange={(e) => setTimes(e.target.value)} />
+          </Field>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">Changes count from this month on. Months you already paid keep their amount.</p>
       <div className="flex gap-2">
-        <Button type="submit">Save amount</Button>
-        <Button variant="secondary" onClick={onDone}>
+        <Button type="submit" disabled={edit.busy}>
+          {edit.busy ? 'Saving…' : 'Save changes'}
+        </Button>
+        <Button variant="secondary" disabled={edit.busy} onClick={onDone}>
           Cancel
         </Button>
       </div>
-      <ErrorNote message={error} />
+      <ErrorNote message={edit.error} />
     </form>
   )
 }

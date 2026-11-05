@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 
 const items = [
   { to: '/', label: 'Home' },
@@ -16,9 +16,6 @@ export function MainNav() {
       className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:sticky lg:top-0 lg:inset-auto lg:h-dvh lg:w-56 lg:shrink-0 lg:border-t-0 lg:border-r lg:pb-0"
     >
       <p className="hidden px-6 pt-6 pb-4 text-lg font-semibold text-green-900 lg:block">Debt App</p>
-      <Link to="/add" className="mx-3 mb-3 hidden rounded-lg bg-green-900 px-3 py-2 text-center text-sm font-medium text-white lg:block">
-        + Add expense
-      </Link>
       <ul className="mx-auto grid max-w-md grid-cols-5 lg:max-w-none lg:grid-cols-1 lg:gap-1 lg:px-3">
         {items.map((item) => (
           <li key={item.to}>
