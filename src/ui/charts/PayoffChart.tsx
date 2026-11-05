@@ -57,8 +57,7 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
         <li className="flex items-center gap-1.5">
           <span className="inline-block h-0.5 w-4" style={{ background: SAVED }} /> Savings
         </li>
-        {paths.length > 1 &&
-          paths.map((p) => (
+        {paths.map((p) => (
             <li key={p.key} className="flex items-center gap-1.5">
               <svg width="18" height="4" aria-hidden="true">
                 <line x1="0" x2="18" y1="2" y2="2" stroke="#475569" strokeWidth="2" strokeDasharray={p.dashed ? '4 3' : undefined} />
@@ -96,7 +95,7 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
           <g>
             <circle cx={x(cross)} cy={y(main[cross].savedTotal)} r="5" fill={SAVED} stroke="#ffffff" strokeWidth="2" />
             <text x={x(cross) + (x(cross) > W - 130 ? -8 : 8)} y={y(main[cross].savedTotal) - 8} textAnchor={x(cross) > W - 130 ? 'end' : 'start'} fontSize="11" fill="#0f172a">
-              Savings pass debt{paths.length > 1 ? ` (${paths[0].label.toLowerCase()})` : ''}
+              Savings pass debt
             </text>
           </g>
         )}
@@ -142,7 +141,13 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
               })}
             </tbody>
           </table>
-          {main[active]?.carried > 0 && <p className="mt-1 text-amber-900">! {formatPeso(main[active].carried)} carried to the next bill ({paths[0].label.toLowerCase()})</p>}
+          {paths
+            .filter((p) => (p.months[active]?.carried ?? 0) > 0)
+            .map((p) => (
+              <p key={p.key} className="mt-1 text-amber-900">
+                ! {formatPeso(p.months[active].carried)} carried to the next bill ({p.label.toLowerCase()})
+              </p>
+            ))}
         </div>
       )}
       <details className="mt-2 text-sm">

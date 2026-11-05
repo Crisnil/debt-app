@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { todayIso } from '../../domain/dues'
-import { monthsUntil, payoffPaths, type PayoffResult } from '../../domain/payoff'
+import { MIN_CASH_DAYS, monthsUntil, payoffPaths, type PayoffResult } from '../../domain/payoff'
 import { billsByMonth, forecastCards, installmentsEnding, monthlyIncome, PAYABLES, withPayables, type CardForecast } from '../../domain/forecast'
 import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
@@ -11,6 +11,8 @@ import { WithWorkbook } from '../WithWorkbook'
 import { PlannedExpenses } from './PlannedExpenses'
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
+
+const shortDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
 function FutureBillsCard({ workbook, forecasts, today }: { workbook: Workbook; forecasts: CardForecast[]; today: string }) {
   const months = withPayables(billsByMonth(forecasts, today), workbook)
@@ -59,7 +61,22 @@ export function PayoffCard({ workbook, today }: { workbook: Workbook; today: str
   const list: (ChartPath & { result: PayoffResult; living?: string })[] = []
   if (paths.actual) {
     const a = paths.actual
-    list.push({ key: 'actual', label: 'Actual', dashed: false, months: a.result.months, result: a.result, living: `${formatPeso(a.living.monthly)}/mo avg of ${a.living.months.map((m) => monthLabel(m, false)).join(', ')}` })
+    const l = a.living
+    const basis =
+      l.cashBasis?.kind === 'months'
+        ? `avg of ${l.cashBasis.months.map((m) => monthLabel(m, false)).join(', ')}`
+        : l.cashBasis?.kind === 'partial'
+          ? `${shortDay(l.cashBasis.from)}–${shortDay(l.cashBasis.to)}, scaled to a month`
+          : ''
+    const cash = l.cash === null ? `cash not counted yet (needs ${MIN_CASH_DAYS} days of entries)` : `cash and bank ${formatPeso(l.cash)} (${basis})`
+    list.push({
+      key: 'actual',
+      label: l.cash === null ? 'Actual (cards only so far)' : 'Actual',
+      dashed: false,
+      months: a.result.months,
+      result: a.result,
+      living: `${formatPeso(l.monthly)}/mo · cards ${formatPeso(l.card)} (last 3 statements) + ${cash}`,
+    })
   }
   if (paths.planned) list.push({ key: 'plan', label: 'Plan', dashed: true, months: paths.planned.result.months, result: paths.planned.result, living: `${formatPeso(paths.planned.living)}/mo planned` })
   if (list.length === 0) list.push({ key: 'cards', label: 'Card spending only', dashed: false, months: paths.cards.months, result: paths.cards })
@@ -98,7 +115,7 @@ export function PayoffCard({ workbook, today }: { workbook: Workbook; today: str
               {p.label} living costs: {p.living}
             </li>
           ))}
-        {paths.planned && !paths.actual && <li className="text-xs text-slate-500">The Actual line starts after your first full month of entries.</li>}
+        {paths.planned && !paths.actual && <li className="text-xs text-slate-500">The Actual line starts with your first statement lines or {MIN_CASH_DAYS} days of entries.</li>}
         {!paths.planned && <li className="text-xs text-slate-500">Add your planned monthly expenses below to see the Plan line. Cash spending is not counted until then.</li>}
         {changed && (
           <li className="text-green-900">
