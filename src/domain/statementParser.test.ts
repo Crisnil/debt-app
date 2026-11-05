@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatForBank, parseStatementLine } from './statementParser'
+import { formatForBank, parseStatementLine, parseStatementText } from './statementParser'
 
 // Made-up lines in the same layout as real statements.
 describe('parseStatementLine: Metrobank layout (post date first, no year)', () => {
@@ -74,5 +74,71 @@ describe('parseStatementLine: other', () => {
     expect(formatForBank('Metrobank')).toBe('metrobank')
     expect(formatForBank('Security Bank')).toBe('security')
     expect(formatForBank('BPI')).toBe('auto')
+  })
+})
+
+// Made-up block in the same layout as the bank website transaction list.
+const WEBSITE = `Transaction Date
+Description        Transaction Amount
+Mar 31, 2030
+SAMPLE TIRES CITY PHL
+- PHP 1,000.00
+Mar 30, 2030
+SAMPLE MALL 2/12 PRIN
+- PHP 500.50
+Mar 30, 2030
+SAMPLE MALL 2/12 INT
+- PHP 99.50
+Mar 19, 2030
+PAYMENT - PHP/SBC1
++ PHP 5,000.00
+Mar 13, 2030
+SAMPLE STORE 10/12 PRIN
+- PHP 300.00
+Mar 13, 2030
+SAMPLE STORE 10/12 INT
+- PHP 20.00
+Mar 09, 2030
+SAMPLE STORE 10/12 PRIN
+- PHP 100.00
+Mar 09, 2030
+SAMPLE STORE 10/12 INT
+- PHP 5.25`
+
+describe('parseStatementText: bank website layout', () => {
+  const rows = parseStatementText(WEBSITE, 'security', '2030-04-05')
+  const lines = rows.flatMap((r) => (r.line ? [r.line] : []))
+
+  it('skips the header lines', () => {
+    expect(rows.filter((r) => !r.line).map((r) => r.raw)).toEqual(['Transaction Date', 'Description Transaction Amount'])
+  })
+
+  it('reads a purchase with one date for purchase and post', () => {
+    expect(lines[0]).toEqual({
+      postDate: '2030-03-31',
+      txnDate: '2030-03-31',
+      description: 'SAMPLE TIRES CITY PHL',
+      type: 'straight',
+      amount: 100000,
+      termNo: null,
+      totalTerms: null,
+    })
+  })
+
+  it('adds installment principal and interest into one installment line', () => {
+    expect(lines.filter((l) => l.type === 'installment').map((l) => [l.txnDate, l.description, l.termNo, l.totalTerms, l.amount])).toEqual([
+      ['2030-03-30', 'SAMPLE MALL', 2, 12, 60000],
+      ['2030-03-13', 'SAMPLE STORE', 10, 12, 32000],
+      ['2030-03-09', 'SAMPLE STORE', 10, 12, 10525],
+    ])
+  })
+
+  it('reads + PHP as a credit and PAYMENT as a payment', () => {
+    expect(lines.find((l) => l.type === 'payment')).toMatchObject({ txnDate: '2030-03-19', amount: -500000 })
+  })
+
+  it('keeps reading one line per transaction for the PDF layout', () => {
+    const [row] = parseStatementText('03/31/30 04/01/30 SAMPLE SHOP 99.50', 'security', '2030-04-05')
+    expect(row.line).toMatchObject({ txnDate: '2030-03-31', amount: 9950 })
   })
 })

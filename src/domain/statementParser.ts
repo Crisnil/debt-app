@@ -72,3 +72,92 @@ export function formatForBank(bank: string): BankFormat {
   if (/security/i.test(bank)) return 'security'
   return 'auto'
 }
+
+export type ReadLine = { raw: string; line: ParsedLine | null }
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+// Bank website list: "Oct 31, 2026", then the description, then "- PHP 3,200.00" (charge) or "+ PHP 30,000.00" (credit).
+const WEB_DATE = /^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{4})$/
+const WEB_AMOUNT = /^([+-])\s*PHP\s*([\d,]+\.\d{2})$/i
+// Installments on the website are two lines: "<name> n/m PRIN" and "<name> n/m INT".
+const WEB_INSTALLMENT = /^(.+?)\s+(\d+)\/(\d+)\s+(PRIN|INT)$/i
+
+function webDate(m: RegExpMatchArray): IsoDate | null {
+  const month = MONTHS.indexOf(m[1].toLowerCase()) + 1
+  return month ? `${m[3]}-${String(month).padStart(2, '0')}-${m[2].padStart(2, '0')}` : null
+}
+
+/** Reads the bank website layout. Installment principal and interest of the same plan and date become one line. */
+function parseWebsiteBlock(lines: string[]): ReadLine[] {
+  const out: ReadLine[] = []
+  // Which halves (PRIN, INT) each installment line already has.
+  const parts = new Map<ReadLine, Set<string>>()
+  let date: IsoDate | null = null
+  let start = ''
+  let desc: string[] = []
+  const flush = () => {
+    if (date) out.push({ raw: [start, ...desc].join(' '), line: null })
+    date = null
+    desc = []
+  }
+  for (const text of lines) {
+    const d = text.match(WEB_DATE)
+    if (d) {
+      flush()
+      date = webDate(d)
+      start = text
+      if (!date) out.push({ raw: text, line: null })
+      continue
+    }
+    const a = text.match(WEB_AMOUNT)
+    if (a && date) {
+      const description = desc.join(' ')
+      const credit = a[1] === '+'
+      const raw = [start, ...desc, text].join(' ')
+      const inst = description.match(WEB_INSTALLMENT)
+      if (inst && !credit) {
+        const [, name, n, m] = inst
+        const part = inst[4].toUpperCase()
+        // The other half (PRIN or INT) of the same plan and date is already read: add to it.
+        const plan = out.find(
+          (r) =>
+            parts.has(r) &&
+            r.line?.txnDate === date &&
+            r.line.description === name.trim() &&
+            r.line.termNo === Number(n) &&
+            r.line.totalTerms === Number(m) &&
+            !parts.get(r)!.has(part),
+        )
+        if (plan?.line) {
+          plan.line.amount += toCentavos(a[2])
+          plan.raw += ` / ${raw}`
+          parts.get(plan)!.add(part)
+        } else {
+          const row = { raw, line: build(date, date, name, n, m, a[2], false) }
+          out.push(row)
+          parts.set(row, new Set([part]))
+        }
+      } else out.push({ raw, line: build(date, date, description, undefined, undefined, a[2], credit) })
+      date = null
+      desc = []
+      continue
+    }
+    if (date) desc.push(text)
+    else out.push({ raw: text, line: null })
+  }
+  flush()
+  return out
+}
+
+/**
+ * Reads a pasted block: the bank website list (date, description, and amount on separate lines),
+ * or one statement line per line (PDF layout). Lines that are not transactions come back with line = null.
+ */
+export function parseStatementText(raw: string, format: BankFormat, statementDate: IsoDate): ReadLine[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((t) => t.trim().replace(/\s+/g, ' '))
+    .filter(Boolean)
+  if (lines.some((t) => WEB_DATE.test(t)) && lines.some((t) => WEB_AMOUNT.test(t))) return parseWebsiteBlock(lines)
+  return lines.map((text) => ({ raw: text, line: parseStatementLine(text, format, statementDate) }))
+}

@@ -34,6 +34,16 @@ describe('readStatementBlock', () => {
     expect(row.candidates).toEqual([])
   })
 
+  it('finds a purchase already in the sheet even when the description and post date differ', () => {
+    const [row] = readStatementBlock(base, 'alpha', 'Jan 04, 2030\nSAMPLE GROCER CITY PHL\n- PHP 2,500.25', '2030-01-10')
+    expect(row.duplicate).toBe(true)
+  })
+
+  it('marks only one of two equal pasted lines when the sheet has the purchase once', () => {
+    const rows = readStatementBlock(base, 'alpha', '01/05 01/04 SAMPLE GROCER 2,500.25\n01/05 01/04 SAMPLE GROCER 2,500.25', '2030-01-10')
+    expect(rows.map((r) => r.duplicate)).toEqual([true, false])
+  })
+
   it('lets the user pick when two expenses have the same amount', () => {
     const wb = withExpenses(expense('a', '2030-01-20', 50000), expense('b', '2030-01-21', 50000))
     const [row] = readStatementBlock(wb, 'alpha', '01/21 01/21 SAMPLE SHOP 500.00', '2030-02-10')
