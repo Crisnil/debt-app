@@ -11,7 +11,11 @@ export type Card = {
   statementDay: number | null
   dueDay: number | null
   monthlyRate: number | null
+  /** From Cards.credit_limit. null when the cell is empty. */
+  creditLimit: Centavos | null
   active: boolean
+  /** Sheet row number (1-based) in the Cards tab. */
+  row: number
 }
 
 export type CardSnapshot = {

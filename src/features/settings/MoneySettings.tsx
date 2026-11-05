@@ -1,9 +1,9 @@
 import { useState, useSyncExternalStore } from 'react'
-import { addIncomeSource, saveAccountOpening, saveIncomeSource, saveSettings } from '../../data/actions'
+import { addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
 import { moneyAccounts } from '../../domain/accounts'
 import { todayIso } from '../../domain/dues'
-import type { Account, IncomeSource, Workbook } from '../../domain/types'
+import type { Account, Card, IncomeSource, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { canInstall, isInstalled, promptInstall, subscribeInstall } from '../../pwa/install'
 import { useSheetEdit } from '../../state/hooks'
@@ -159,6 +159,50 @@ function AccountRow({ account }: { account: Account }) {
   )
 }
 
+function CreditLimitRow({ card: c }: { card: Card }) {
+  const edit = useSheetEdit()
+  const [limit, setLimit] = useState(c.creditLimit !== null ? toPesos(c.creditLimit).toFixed(2) : '')
+
+  function save() {
+    const cents = parsePositiveAmount(limit)
+    if (cents === null) return edit.fail('Enter the credit limit, more than 0.')
+    void edit.run(`Saved ${c.name} limit.`, (sheetId, wb, token) => saveCreditLimit(sheetId, wb, c.row, cents, token))
+  }
+
+  return (
+    <li className="space-y-2 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <Field label={`${c.name} (₱)`} htmlFor={`limit-${c.cardId}`}>
+            <TextInput id={`limit-${c.cardId}`} inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="e.g. 200,000" />
+          </Field>
+        </div>
+        <Button variant="secondary" disabled={edit.busy} onClick={save}>
+          Save
+        </Button>
+      </div>
+      <ErrorNote message={edit.error} />
+      <SuccessNote message={edit.done} />
+    </li>
+  )
+}
+
+function CreditLimits({ workbook }: { workbook: Workbook }) {
+  return (
+    <div className={card}>
+      <h2 className="font-medium text-slate-900">Credit limits</h2>
+      <p className="mt-1 text-sm text-slate-600">Home shows how much of each limit you use. Update a limit when the bank changes it.</p>
+      <ul className="mt-3 space-y-3">
+        {workbook.cards
+          .filter((c) => c.active)
+          .map((c) => (
+            <CreditLimitRow key={c.cardId} card={c} />
+          ))}
+      </ul>
+    </div>
+  )
+}
+
 function SavingsGoal({ workbook }: { workbook: Workbook }) {
   const edit = useSheetEdit()
   const s = (key: string, fallback: string) => workbook.settings[key]?.value || fallback
@@ -231,7 +275,7 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
       <div className={card}>
         <h2 className="font-medium text-slate-900">Income</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Recurring income in the plan: <b>{formatPeso(monthlyPlan)}</b> per month. Record each payday in <b>Add → Income</b>.
+          Recurring income in the plan: <b>{formatPeso(monthlyPlan)}</b> per month. Record each payday in <b>Add → Other entries → Income</b>.
         </p>
         <ul className="mt-3 space-y-3">
           {workbook.incomeSources.map((s) => (
@@ -249,6 +293,7 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
           ))}
         </ul>
       </div>
+      <CreditLimits workbook={workbook} />
       <SavingsGoal workbook={workbook} />
     </>
   )

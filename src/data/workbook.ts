@@ -42,7 +42,9 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
       statementDay: int(r.statement_day),
       dueDay: int(r.due_day),
       monthlyRate: num(r.monthly_rate),
+      creditLimit: text(r.credit_limit) ? money(r.credit_limit) : null,
       active: text(r.status).toLowerCase() !== 'closed',
+      row: r.__row,
     }))
 
   const statementProblems: SchemaProblem[] = []

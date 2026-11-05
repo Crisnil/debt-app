@@ -201,6 +201,13 @@ export async function addIncomeSource(
   await appendRows(sheetId, 'Income', [row], token)
 }
 
+/** Sets Cards.credit_limit for one card. */
+export async function saveCreditLimit(sheetId: string, wb: Workbook, row: number, limit: Centavos, token: string) {
+  const h = wb.headers.Cards
+  if (!h.includes('credit_limit')) throw new Error('Add a column named "credit_limit" to the Cards tab first.')
+  await updateCells(sheetId, [{ range: cellRange('Cards', h, 'credit_limit', row), values: [[pesos(limit)]] }], token)
+}
+
 export async function saveAccountOpening(sheetId: string, wb: Workbook, row: number, openingBalance: Centavos, openingDate: IsoDate, token: string) {
   const h = wb.headers.Accounts
   await updateCells(
