@@ -23,6 +23,8 @@ export type BillForecast = {
   fees: Centavos
   /** Unpaid balance carried from the last statement plus estimated interest. First bill after the statement only. */
   carried: Centavos
+  /** The estimated interest inside `carried` (0 when the statement already shows interest in `fees`). */
+  interestEstimate: Centavos
   /** Usual spending not logged yet (average of the last statements minus what is logged). 0 when the statement lines are in. */
   estimate: Centavos
   /** The statement lines for this bill are in the sheet. */
@@ -97,7 +99,7 @@ export function forecastCard(wb: Workbook, card: Card, today: IsoDate): CardFore
   const bills: BillForecast[] = []
   const empty = { statementLeft: 0, installments: 0, purchases: 0, fees: 0, carried: 0, estimate: 0 }
   if (snapshot && snapshot.dueDate >= today && summary.remainingDue > 0) {
-    bills.push({ cardId: card.cardId, bill: { statementDate: snapshot.asOf, dueDate: snapshot.dueDate }, ...empty, statementLeft: summary.remainingDue, fromStatement: true, total: summary.remainingDue })
+    bills.push({ cardId: card.cardId, bill: { statementDate: snapshot.asOf, dueDate: snapshot.dueDate }, ...empty, interestEstimate: 0, statementLeft: summary.remainingDue, fromStatement: true, total: summary.remainingDue })
   }
   let bill = anchor ? nextBill(card, anchor) : billFor(card, today)
   for (let first = true; bill && month(bill.dueDate) <= lastMonth; bill = nextBill(card, bill.statementDate), first = false) {
@@ -118,7 +120,7 @@ export function forecastCard(wb: Workbook, card: Card, today: IsoDate): CardFore
     const carried = carriedBase + (fees > 0 ? 0 : Math.round(carriedBase * (card.monthlyRate ?? 0.03)))
     const estimate = fromStatement ? 0 : Math.max(usual - logged, 0)
     const parts = { statementLeft: 0, installments, purchases, fees, carried, estimate }
-    bills.push({ cardId: card.cardId, bill, ...parts, fromStatement, total: sum(Object.values(parts)) })
+    bills.push({ cardId: card.cardId, bill, ...parts, interestEstimate: carried - carriedBase, fromStatement, total: sum(Object.values(parts)) })
   }
 
   // Owed: billed balance left + charges after that statement + logged expenses not billed + installments not billed yet.
