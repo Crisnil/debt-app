@@ -1,9 +1,9 @@
 import { Link, useLocation } from 'react-router-dom'
 
-/** Round "+" button above the bottom bar on phones. Wide screens have "+ Add expense" in the sidebar. */
+/** Round "+" button above the bottom bar on phones. Wide screens have "+ Add expense" in the sidebar. Home has its own buttons. */
 export function AddButton() {
   const { pathname } = useLocation()
-  if (pathname.startsWith('/add')) return null
+  if (pathname === '/' || pathname.startsWith('/add')) return null
   return (
     <Link
       to="/add"

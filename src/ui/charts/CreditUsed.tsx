@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import type { CardForecast } from '../../domain/forecast'
 import { formatPeso } from '../../lib/money'
-import { STATUS, usedStatus } from './palette'
+import { debtHealth } from '../../domain/health'
+import { STATUS, USED_WORD } from './palette'
 
 /** What you owe on one card against its credit limit. showName: false when the card name is already shown above. */
 export function CreditUsedBar({ forecast: { card, owed, used }, showName = true }: { forecast: CardForecast; showName?: boolean }) {
@@ -18,7 +19,8 @@ export function CreditUsedBar({ forecast: { card, owed, used }, showName = true 
       </div>
     )
   }
-  const s = STATUS[usedStatus(used)]
+  const health = debtHealth(used)
+  const s = STATUS[health]
   const pct = Math.round(used * 100)
   return (
     <div className="text-sm">
@@ -27,7 +29,7 @@ export function CreditUsedBar({ forecast: { card, owed, used }, showName = true 
         <span className="text-slate-800">
           <b>{pct}%</b>{' '}
           <span className="text-xs text-slate-600">
-            {s.icon} {s.label}
+            {s.icon} {USED_WORD[health]}
           </span>
         </span>
       </p>
