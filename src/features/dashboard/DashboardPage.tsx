@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { daysBetween, todayIso } from '../../domain/dues'
 import { forecastCards, PAYABLES } from '../../domain/forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
-import { carriedAlerts, dueItems, lastInstallment, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
+import { carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
+import { monthsUntil, payoffPath } from '../../domain/payoff'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useLiveWorkbook, useSession } from '../../state/hooks'
@@ -46,7 +47,7 @@ function SectionHead({ title, to, link }: { title: string; to?: string; link?: s
   )
 }
 
-function Progress({ workbook, owed, today, last }: { workbook: Workbook; owed: ReturnType<typeof owedParts>; today: IsoDate; last: ReturnType<typeof lastInstallment> }) {
+function Progress({ workbook, owed, today, debtFree }: { workbook: Workbook; owed: ReturnType<typeof owedParts>; today: IsoDate; debtFree: string | null }) {
   const [open, setOpen] = useState(false)
   const savings = savingsParts(workbook)
   const owedTotal = owed.reduce((s, p) => s + p.amount, 0)
@@ -58,11 +59,9 @@ function Progress({ workbook, owed, today, last }: { workbook: Workbook; owed: R
       <DebtSavingsBar owed={owedTotal} saved={savedTotal} />
       <p className="mt-2 flex flex-wrap justify-between gap-x-4 text-xs text-slate-600">
         <span>{savedTotal >= owedTotal && owedTotal > 0 ? '✓ Savings are more than what we owe' : `Savings cover ${cover}% of what we owe`}</span>
-        {last && (
-          <span>
-            Last installment {monthLabel(last.month)} ({last.monthsLeft} months)
-          </span>
-        )}
+        <Link to="/plan" className="text-green-900 underline">
+          {debtFree ? `Debt-free ${monthLabel(debtFree)} (${monthsUntil(today, debtFree)} months)` : 'Not debt-free within 5 years at this pace'}
+        </Link>
       </p>
       <button type="button" className="mt-2 text-sm text-green-900" aria-expanded={open} onClick={() => setOpen(!open)}>
         {open ? '▾ Hide details' : '▸ Show details'}
@@ -313,7 +312,7 @@ export function HomeView({ workbook, today }: { workbook: Workbook; today: IsoDa
           </Link>
         </div>
       </div>
-      <Progress workbook={workbook} owed={owed} today={today} last={lastInstallment(forecasts, today)} />
+      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPath(workbook, today).debtFree} />
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
       <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
       <Tiles workbook={workbook} forecasts={forecasts} today={today} />
