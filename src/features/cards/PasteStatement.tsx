@@ -22,19 +22,45 @@ type Choice = { include: boolean; link: string }
 
 const txnText = (t: Transaction) => `${t.date} · ${t.merchant || t.category || 'expense'} · ${formatPeso(t.amount)}`
 
+function Undo({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="ml-1 underline" onClick={onClick}>
+      Undo
+    </button>
+  )
+}
+
+/** Suggested match: ask. Confirmed: say it is linked. "Not this": say it is not linked. Undo goes back to the question. */
 function MatchPicker({ row, link, onChange }: { row: PastedRow; link: string; onChange: (link: string) => void }) {
   if (!row.line || row.line.type !== 'straight') return null
   if (row.candidates.length === 0) return <p className="mt-1 text-xs text-slate-500">No logged expense with this amount. Counted from the statement.</p>
+  const chosen = row.candidates.find((t) => t.txnId === link)
+  if (chosen) {
+    return (
+      <p className="mt-2 rounded-lg bg-green-50 p-2 text-sm text-green-900">
+        ✓ <b>Same purchase:</b> your entry {txnText(chosen)}. Linked when you save.
+        <Undo onClick={() => onChange('')} />
+      </p>
+    )
+  }
+  if (link === NO_MATCH) {
+    return (
+      <p className="mt-2 rounded-lg bg-slate-100 p-2 text-sm text-slate-700">
+        ✗ Not linked. Counted from the statement.
+        <Undo onClick={() => onChange('')} />
+      </p>
+    )
+  }
   if (row.candidates.length === 1) {
     const t = row.candidates[0]
     return (
       <div className="mt-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
         <p>Matches your entry: {txnText(t)}?</p>
         <div className="mt-2 flex gap-2">
-          <Button className="py-1.5" variant={link === t.txnId ? 'primary' : 'secondary'} aria-pressed={link === t.txnId} onClick={() => onChange(t.txnId)}>
+          <Button className="py-1.5" onClick={() => onChange(t.txnId)}>
             Same purchase
           </Button>
-          <Button className="py-1.5" variant={link === NO_MATCH ? 'primary' : 'secondary'} aria-pressed={link === NO_MATCH} onClick={() => onChange(NO_MATCH)}>
+          <Button className="py-1.5" variant="secondary" onClick={() => onChange(NO_MATCH)}>
             Not this
           </Button>
         </div>
@@ -45,7 +71,7 @@ function MatchPicker({ row, link, onChange }: { row: PastedRow; link: string; on
     <div className="mt-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
       <label className="block">
         {row.candidates.length} entries have this amount. Which one is it?
-        <select className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900" value={link} onChange={(e) => onChange(e.target.value)}>
+        <select className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900" value="" onChange={(e) => onChange(e.target.value)}>
           <option value="">Choose…</option>
           {row.candidates.map((t) => (
             <option key={t.txnId} value={t.txnId}>
@@ -69,10 +95,10 @@ export function PasteStatement({ sheetId, workbook, cardId }: { sheetId: string;
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
-  const canLink = (workbook.headers[card.sheetTab] ?? []).includes('txn_id')
   const readable = rows?.map((row, i) => ({ row, i })).filter(({ row }) => row.line) ?? []
   const unreadable = rows?.filter((row) => !row.line) ?? []
   const toSave = readable.filter(({ i }) => choices[i]?.include)
+  const matchedCount = toSave.filter(({ i }) => choices[i].link && choices[i].link !== NO_MATCH).length
 
   function read() {
     setSaved(null)
@@ -136,11 +162,6 @@ export function PasteStatement({ sheetId, workbook, cardId }: { sheetId: string;
 
       {rows && (
         <div className="space-y-3">
-          {!canLink && (
-            <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-              Tab “{card.sheetTab}” has no <code>txn_id</code> column, so matches will not be saved. Add the column to the tab.
-            </p>
-          )}
           <ul className="space-y-2">
             {readable.map(({ row, i }) => {
               const line = row.line!
@@ -174,6 +195,7 @@ export function PasteStatement({ sheetId, workbook, cardId }: { sheetId: string;
           )}
           <Button className="w-full" disabled={toSave.length === 0} onClick={saveAll}>
             Save {toSave.length} line{toSave.length === 1 ? '' : 's'}
+            {matchedCount > 0 && ` (${matchedCount} matched)`}
           </Button>
         </div>
       )}

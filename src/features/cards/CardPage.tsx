@@ -37,6 +37,11 @@ export function CardPage() {
               ← Cards
             </Link>
             <h1 className="text-2xl font-semibold text-slate-900">{card.name}</h1>
+            {card.sheetTab && !(workbook.headers[card.sheetTab] ?? []).includes('txn_id') && (
+              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                Tab “{card.sheetTab}” has no <code>txn_id</code> column, so matches cannot be saved. Add a column named <code>txn_id</code> at the end of the tab.
+              </p>
+            )}
             <Chips label="Show" options={options} value={tab} onChange={(v) => setParams({ tab: v }, { replace: true })} />
             {/* key: reset the form when the card or tab changes */}
             {tab === 'check' && <CheckStatement key={`check-${cardId}`} sheetId={sheetId} workbook={workbook} cardId={cardId} />}

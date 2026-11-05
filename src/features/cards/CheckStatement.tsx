@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { linkStatementLine } from '../../data/actions'
 import { NO_MATCH, reconcileCard } from '../../domain/reconcile'
 import type { StatementLine, Transaction, Workbook } from '../../domain/types'
@@ -40,26 +40,47 @@ function Section({ title, count, tone, children }: { title: string; count: numbe
 /** Matched, to-check, and not-billed purchases of one card. Links made here are saved right away (online only). */
 export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string; workbook: Workbook; cardId: string }) {
   const queryClient = useQueryClient()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // The line (sheet row) being saved, the line whose save failed, and a short note after a save.
+  const [saving, setSaving] = useState<{ row: number; txnId: string } | null>(null)
+  const [failed, setFailed] = useState<{ row: number; message: string } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const busy = saving !== null
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(null), 3000)
+    return () => clearTimeout(timer)
+  }, [notice])
 
   const r = reconcileCard(workbook, cardId)
   const linkable = [...r.notOnStatement, ...r.unbilled]
 
   async function link(line: StatementLine, txnId: string) {
+    setNotice(null)
     const token = currentToken()
-    if (!token) return setError('Sign in again to save links.')
-    setBusy(true)
-    setError(null)
+    if (!token) return setFailed({ row: line.row, message: 'Your Google sign-in expired. Sign in again on the Home screen.' })
+    setSaving({ row: line.row, txnId })
+    setFailed(null)
     try {
       await linkStatementLine(sheetId, workbook, line, txnId, token)
       await queryClient.invalidateQueries({ queryKey: ['workbook', sheetId] })
+      setNotice(txnId === '' ? 'Unlinked.' : txnId === NO_MATCH ? 'Saved: not logged. Counted from the statement.' : 'Linked. Counted once.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setFailed({ row: line.row, message: e instanceof Error ? e.message : String(e) })
     } finally {
-      setBusy(false)
+      setSaving(null)
     }
   }
+
+  /** Button text, "Saving…" while this line and choice are being saved. */
+  const label = (line: StatementLine, txnId: string, text: string) => (saving?.row === line.row && saving.txnId === txnId ? 'Saving…' : text)
+  /** Lines still in the outbox are not in the sheet yet, so they cannot be linked. */
+  const LineNote = ({ line }: { line: StatementLine }) =>
+    line.row === 0 ? (
+      <p className="mt-2 text-xs text-amber-900">Waiting to be saved to the sheet. Link it after it syncs.</p>
+    ) : failed?.row === line.row ? (
+      <ErrorNote message={failed.message} />
+    ) : null
 
   return (
     <div className="space-y-4">
@@ -67,7 +88,11 @@ export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string;
         Each purchase is counted once. Your expense and the same line on the statement are matched by card, amount, and date (±3 days).
         {r.latestStatement && ` Latest statement: ${r.latestStatement}.`}
       </p>
-      <ErrorNote message={error} />
+      {notice && (
+        <p role="status" className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 rounded-lg bg-green-900 p-3 text-center text-sm text-white shadow-lg lg:inset-x-auto lg:right-10 lg:bottom-10">
+          {notice}
+        </p>
+      )}
 
       <Section title="Please confirm" count={r.probable.length} tone="warn">
         {r.probable.map(({ line, txn }) => (
@@ -79,13 +104,14 @@ export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string;
               Your entry: <TxnText txn={txn} />
             </p>
             <div className="mt-2 flex gap-2">
-              <Button disabled={busy} onClick={() => link(line, txn.txnId)}>
-                Same purchase
+              <Button disabled={busy || line.row === 0} onClick={() => link(line, txn.txnId)}>
+                {label(line, txn.txnId, 'Same purchase')}
               </Button>
-              <Button variant="secondary" disabled={busy} onClick={() => link(line, NO_MATCH)}>
-                Not the same
+              <Button variant="secondary" disabled={busy || line.row === 0} onClick={() => link(line, NO_MATCH)}>
+                {label(line, NO_MATCH, 'Not the same')}
               </Button>
             </div>
+            <LineNote line={line} />
           </li>
         ))}
       </Section>
@@ -99,7 +125,7 @@ export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string;
                 <select
                   aria-label="Link to an expense"
                   className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm"
-                  disabled={busy}
+                  disabled={busy || line.row === 0}
                   defaultValue=""
                   onChange={(e) => e.target.value && link(line, e.target.value)}
                 >
@@ -111,10 +137,11 @@ export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string;
                   ))}
                 </select>
               )}
-              <Button variant="secondary" disabled={busy} onClick={() => link(line, NO_MATCH)}>
-                I did not log it
+              <Button variant="secondary" disabled={busy || line.row === 0} onClick={() => link(line, NO_MATCH)}>
+                {saving?.row === line.row ? 'Saving…' : 'I did not log it'}
               </Button>
             </div>
+            <LineNote line={line} />
           </li>
         ))}
       </Section>
@@ -134,9 +161,10 @@ export function CheckStatement({ sheetId, workbook, cardId }: { sheetId: string;
             <TxnText txn={txn} />
             {how === 'manual' && (
               <button className="shrink-0 text-xs text-slate-500 underline" disabled={busy} onClick={() => link(line, '')}>
-                Unlink
+                {label(line, '', 'Unlink')}
               </button>
             )}
+            {failed?.row === line.row && <ErrorNote message={failed.message} />}
           </li>
         ))}
       </Section>
