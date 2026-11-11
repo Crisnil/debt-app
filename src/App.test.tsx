@@ -47,6 +47,7 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Close add menu' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('link', { name: 'Money received' })).toHaveAttribute('href', '/add/other?type=received')
     expect(screen.getByRole('link', { name: 'Add savings' })).toHaveAttribute('href', '/add/other?type=save')
+    expect(screen.getByRole('link', { name: 'Move money' })).toHaveAttribute('href', '/add/other?type=move')
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('link', { name: 'Money received' })).not.toBeInTheDocument()
 
