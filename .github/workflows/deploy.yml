@@ -39,6 +39,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    # One deploy at a time, in order. With the check below, an older build never replaces a newer one.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
@@ -46,5 +50,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - id: latest
+        name: Deploy only the newest main
+        run: |
+          newest=$(git ls-remote "https://github.com/${{ github.repository }}.git" refs/heads/main | cut -f1)
+          if [ "$newest" = "${{ github.sha }}" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; else echo "Skipped: main is now $newest"; fi
       - id: deployment
+        if: steps.latest.outputs.deploy == 'true'
         uses: actions/deploy-pages@v4
