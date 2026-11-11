@@ -7,15 +7,16 @@ const icon = (path: ReactNode) => (
   </svg>
 )
 
-// Receipt, peso sign, and money coming in (arrow into a tray).
+// Two arrows (money between accounts), money coming in (arrow into a tray), peso sign, and receipt.
 const ACTIONS = [
+  { to: '/add/other?type=move', label: 'Move money', icon: icon(<path d="M4 8h14m0 0-4-4m4 4-4 4M20 16H6m0 0 4-4m-4 4 4 4" />) },
   { to: '/add/other?type=received', label: 'Money received', icon: icon(<path d="M12 3v11m0 0-4-4m4 4 4-4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />) },
   { to: '/add/other?type=save', label: 'Add savings', icon: <span className="text-lg font-semibold" aria-hidden="true">₱</span> },
   { to: '/add', label: 'Add expense', icon: icon(<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6m-6 4h3" />) },
 ]
 
 /**
- * Round + button in the bottom-right corner. Tap it to open three actions above it; the + turns into ×.
+ * Round + button in the bottom-right corner. Tap it to open four actions above it; the + turns into ×.
  * Tap ×, tap outside, or press Escape to close. Hidden on the Add pages.
  */
 export function AddButton() {

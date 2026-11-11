@@ -3,10 +3,11 @@ import { Chips } from '../../ui/form'
 import { WithWorkbook } from '../WithWorkbook'
 import { CashOutForm } from './CashOutForm'
 import { IncomeForm } from './IncomeForm'
+import { MoveMoneyForm } from './MoveMoneyForm'
 import { ReceivedForm } from './ReceivedForm'
 import { SavingsForm } from './SavingsForm'
 
-const kinds = ['income', 'received', 'save', 'cashout'] as const
+const kinds = ['income', 'received', 'save', 'move', 'cashout'] as const
 
 type Kind = (typeof kinds)[number]
 
@@ -22,6 +23,7 @@ export function OtherEntriesPage() {
           income: 'Income',
           received: 'Received money',
           save: `Save to ${savings.length === 1 ? savings[0].label : 'savings'}`,
+          move: 'Move money',
           cashout: 'Cash-out from e-wallet',
         }
         return (
@@ -35,6 +37,7 @@ export function OtherEntriesPage() {
             {kind === 'income' && <IncomeForm key="income" sheetId={sheetId} workbook={workbook} />}
             {kind === 'received' && <ReceivedForm key="received" sheetId={sheetId} workbook={workbook} />}
             {kind === 'save' && <SavingsForm key="save" sheetId={sheetId} workbook={workbook} />}
+            {kind === 'move' && <MoveMoneyForm key="move" sheetId={sheetId} workbook={workbook} />}
             {kind === 'cashout' && <CashOutForm key="cashout" sheetId={sheetId} workbook={workbook} />}
             <p className="text-sm text-slate-600">Card payments and statement lines are on each card&apos;s page. Bills and money you owe are on Bills.</p>
           </section>
