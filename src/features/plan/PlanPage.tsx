@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { todayIso } from '../../domain/dues'
-import { MIN_CASH_DAYS, monthsUntil, payoffPaths, type PayoffResult } from '../../domain/payoff'
+import { MIN_CASH_DAYS, monthsUntil, payoffPaths, type PayoffMonth, type PayoffResult } from '../../domain/payoff'
 import { billsByMonth, forecastCards, installmentsEnding, monthlyIncome, PAYABLES, withPayables, type CardForecast } from '../../domain/forecast'
 import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
@@ -47,6 +47,72 @@ function EndingCard({ forecasts }: { forecasts: CardForecast[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+const MATH: { label: string; value: (m: PayoffMonth) => number }[] = [
+  { label: 'Income', value: (m) => m.income },
+  { label: '− Living costs', value: (m) => -m.living },
+  { label: '− Bills and loans', value: (m) => -m.nonCard },
+  { label: '− Installments', value: (m) => -m.installments },
+  { label: '− Card balance from before', value: (m) => -m.earlier },
+  { label: '− Interest', value: (m) => -m.interest },
+]
+
+/** One month of each path as a sum: income − living − bills − installments − earlier balance − interest = saved. */
+function MonthlyMath({ paths }: { paths: { key: string; label: string; months: PayoffMonth[] }[] }) {
+  const months = paths[0].months.map((m) => m.month)
+  const [month, setMonth] = useState(months[0])
+  const rows = paths.map((p) => p.months.find((m) => m.month === month))
+  const net = (m: PayoffMonth | undefined) => (m ? MATH.reduce((s, r) => s + r.value(m), 0) : 0)
+  const cell = 'py-1 text-right'
+  const num = { fontVariantNumeric: 'tabular-nums' } as const
+  return (
+    <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-medium text-slate-900">Monthly math</h3>
+        <select aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm">
+          {months.map((m) => (
+            <option key={m} value={m}>
+              {monthLabel(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <table className="mt-2 w-full">
+        <thead>
+          <tr className="text-xs text-slate-500">
+            <th className="py-1 text-left font-normal">By due month</th>
+            {paths.map((p) => (
+              <th key={p.key} className={`${cell} font-normal`}>
+                {p.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="text-slate-700">
+          {MATH.map((r) => (
+            <tr key={r.label}>
+              <td className="py-1">{r.label}</td>
+              {rows.map((m, i) => (
+                <td key={paths[i].key} className={cell} style={num}>
+                  {m ? formatPeso(Math.abs(r.value(m))) : '—'}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr className="border-t border-slate-300 font-semibold text-slate-900">
+            <td className="py-1">= Saved</td>
+            {rows.map((m, i) => (
+              <td key={paths[i].key} className={`${cell} ${net(m) < 0 ? 'text-red-800' : ''}`} style={num}>
+                {net(m) < 0 ? `short ${formatPeso(-net(m))}` : formatPeso(net(m))}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-1 text-xs text-slate-500">Short: the part not paid is carried to the next bill, with interest.</p>
     </div>
   )
 }
@@ -126,6 +192,7 @@ export function PayoffCard({ workbook, today }: { workbook: Workbook; today: str
       <div className="mt-4">
         <PayoffChart paths={shown} />
       </div>
+      <MonthlyMath paths={shown} />
       <details className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
         <summary className="cursor-pointer font-medium text-slate-900">What if…</summary>
         <label className="mt-3 block text-slate-700" htmlFor="cut">
@@ -165,7 +232,7 @@ export function PlanPage() {
             <h1 className="text-2xl font-semibold text-slate-900">Plan</h1>
             <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6 lg:space-y-0">
               <PayoffCard workbook={workbook} today={today} />
-              <PlannedExpenses sheetId={sheetId} workbook={workbook} />
+              <PlannedExpenses sheetId={sheetId} workbook={workbook} today={today} />
             </div>
             <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6 lg:space-y-0">
               <FutureBillsCard workbook={workbook} forecasts={forecasts} today={today} />

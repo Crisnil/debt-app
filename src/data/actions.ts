@@ -179,13 +179,13 @@ export function setPayableAmount(sheetId: string, payableId: string, month: stri
   return value
 }
 
-/** A line of the planned monthly expenses. */
-export function addPlannedExpense(sheetId: string, name: string, amount: Centavos): PlannedExpense {
-  const value: PlannedExpense = { itemId: newId(), name, amount, active: true, row: 0 }
+/** A line of the planned monthly expenses. With a payable_id, the line is a bill from the Bills page. */
+export function addPlannedExpense(sheetId: string, name: string, amount: Centavos, payableId = ''): PlannedExpense {
+  const value: PlannedExpense = { itemId: newId(), name, amount, active: true, payableId, row: 0 }
   enqueue(sheetId, {
     key: value.itemId,
     tab: 'PlannedExpenses',
-    record: { item_id: value.itemId, name, amount: pesos(amount), active: true, note: '' },
+    record: { item_id: value.itemId, name, amount: pesos(amount), active: true, note: '', payable_id: payableId },
     entity: { kind: 'plannedExpense', value },
   })
   return value
@@ -200,9 +200,18 @@ export async function savePlannedExpense(sheetId: string, wb: Workbook, row: num
   await updateCells(sheetId, [cell('name', safeText(edit.name)), cell('amount', pesos(edit.amount)), cell('active', edit.active)], token)
 }
 
-/** Stops a payable: it no longer shows for new months. Months already paid stay. */
+/** Stops a payable: it no longer shows for new months. Months already paid stay. Its planned lines leave the plan too. */
 export async function stopPayable(sheetId: string, wb: Workbook, row: number, token: string) {
-  await updateCells(sheetId, [{ range: cellRange('Payables', wb.headers.Payables, 'active', row), values: [[false]] }], token)
+  const payableId = wb.payables.find((p) => p.row === row)?.payableId
+  const planned = payableId ? wb.plannedExpenses.filter((e) => e.active && e.payableId === payableId && e.row > 0) : []
+  await updateCells(
+    sheetId,
+    [
+      { range: cellRange('Payables', wb.headers.Payables, 'active', row), values: [[false]] },
+      ...planned.map((e) => ({ range: cellRange('PlannedExpenses', wb.headers.PlannedExpenses, 'active', e.row), values: [[false]] })),
+    ],
+    token,
+  )
 }
 
 export type PayableEdit = Pick<Payable, 'name' | 'payee' | 'category' | 'amount' | 'dueDay' | 'times'>

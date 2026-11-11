@@ -103,7 +103,15 @@ export type Payable = {
 }
 
 /** One line of the planned monthly expenses (your guide), e.g. Grocery ₱5,000. */
-export type PlannedExpense = { itemId: string; name: string; amount: Centavos; active: boolean; row: number }
+export type PlannedExpense = {
+  itemId: string
+  name: string
+  amount: Centavos
+  active: boolean
+  /** The bill (Payables.payable_id) this line was added from. '' for a line added by hand. */
+  payableId: string
+  row: number
+}
 
 /** The real amount of a recurring payable for one month, when it differs from the usual amount. */
 export type PayableAmount = { payableId: string; month: string; amount: Centavos; createdAt: string }
