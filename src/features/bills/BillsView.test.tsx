@@ -51,12 +51,12 @@ const wb: Workbook = {
   transactions: [...base.transactions, paid('elec', '2030-01', 100000), paid('elec', '2030-02', 100000), paid('water', '2030-03', 100000)],
 }
 
-function renderBills(today = '2030-03-15') {
+function renderBills(today = '2030-03-15', workbook = wb) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <SessionProvider>
         <MemoryRouter>
-          <BillsView sheetId="s" workbook={wb} today={today} />
+          <BillsView sheetId="s" workbook={workbook} today={today} />
         </MemoryRouter>
       </SessionProvider>
     </QueryClientProvider>,
@@ -100,6 +100,25 @@ describe('Bills table', () => {
     expect(within(electric).getByRole('alertdialog', { name: 'Delete Sample electric' })).toHaveTextContent('Payments you already made stay in your records.')
     await userEvent.click(within(electric).getByRole('button', { name: 'Cancel' }))
     expect(within(electric).queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('adds a bill to the plan with + Plan, and shows In plan · Remove once it is there', async () => {
+    const inPlan: Workbook = { ...wb, updates: [], plannedExpenses: [{ itemId: 'i', name: 'Sample water', amount: 100000, active: true, payableId: 'water', row: 2 }] }
+    renderBills('2030-03-15', inPlan)
+    const row = (name: string) => screen.getAllByRole('listitem').find((r) => within(r).queryByText(name))!
+    expect(within(row('Sample water')).getByRole('button', { name: 'Remove Sample water from the plan' })).toHaveTextContent('✓ In plan · Remove')
+    await userEvent.click(within(row('Sample electric')).getByRole('button', { name: 'Add Sample electric to the plan' }))
+    expect(JSON.parse(localStorage.getItem('debt-app.outbox.s')!)).toContainEqual(
+      expect.objectContaining({ tab: 'PlannedExpenses', record: expect.objectContaining({ name: 'Sample electric', amount: 1000, payable_id: 'elec' }) }),
+    )
+    await userEvent.click(within(row('Sample water')).getByRole('button', { name: 'Delete' }))
+    expect(within(row('Sample water')).getByRole('alertdialog')).toHaveTextContent('It also leaves your plan.')
+  })
+
+  it('hides + Plan until the sheet has the planned expenses column', () => {
+    renderBills()
+    expect(screen.queryByRole('button', { name: /to the plan$/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/To add bills to your plan, open Settings → Update sheet/)).toBeInTheDocument()
   })
 
   it('keeps the amount of earlier paid months when the usual amount changes', () => {

@@ -30,6 +30,7 @@ export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
   Cards: ['credit_limit'],
   Accounts: ['maintaining_balance'],
   Transactions: ['payable_id', 'payable_month'],
+  PlannedExpenses: ['payable_id'],
 }
 
 /** A tab to add (with its header row) or columns to add at the end of a tab's header row. */
@@ -39,7 +40,7 @@ export type SheetUpdate = { tab: string; create: boolean; columns: string[] }
 export function sheetUpdates(availableTabs: readonly string[], headers: Record<string, string[]>, statementTabs: readonly string[]): SheetUpdate[] {
   const updates: SheetUpdate[] = []
   for (const [tab, columns] of Object.entries(OPTIONAL_TABS)) {
-    if (!availableTabs.includes(tab)) updates.push({ tab, create: true, columns: [...columns] })
+    if (!availableTabs.includes(tab)) updates.push({ tab, create: true, columns: [...columns, ...(OPTIONAL_COLUMNS[tab] ?? [])] })
   }
   const wanted: [string, readonly string[]][] = [...Object.entries(OPTIONAL_COLUMNS), ...statementTabs.map((t): [string, readonly string[]] => [t, ['txn_id']])]
   for (const [tab, columns] of wanted) {

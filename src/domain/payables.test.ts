@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sheetUpdateCells } from '../data/actions'
+import { sheetUpdates } from '../data/schema'
 import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { billsByMonth, forecastCards, PAYABLES, withPayables } from './forecast'
@@ -117,16 +118,21 @@ describe('sheet updates', () => {
     expect(base.updates).toEqual([
       { tab: 'Payables', create: true, columns: expect.arrayContaining(['payable_id', 'times']) },
       { tab: 'PayableAmounts', create: true, columns: ['entry_id', 'payable_id', 'month', 'amount', 'created_at'] },
-      { tab: 'PlannedExpenses', create: true, columns: ['item_id', 'name', 'amount', 'active', 'note'] },
+      { tab: 'PlannedExpenses', create: true, columns: ['item_id', 'name', 'amount', 'active', 'note', 'payable_id'] },
       { tab: 'Accounts', create: false, columns: ['maintaining_balance'] },
       { tab: 'Transactions', create: false, columns: ['payable_id', 'payable_month'] },
       { tab: 'CC Beta', create: false, columns: ['txn_id'] },
     ])
   })
 
+  it('adds payable_id to a PlannedExpenses tab made before it', () => {
+    const headers = { PlannedExpenses: ['item_id', 'name', 'amount', 'active', 'note'] }
+    expect(sheetUpdates(['PlannedExpenses'], headers, [])).toContainEqual({ tab: 'PlannedExpenses', create: false, columns: ['payable_id'] })
+  })
+
   it('writes header cells from column A for a new tab and after the last header for an existing tab', () => {
     const cells = sheetUpdateCells(base.headers, base.updates)
-    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:L1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:E1", "'Accounts'!I1:I1", "'Transactions'!J1:K1", "'CC Beta'!K1:K1"])
+    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:L1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:F1", "'Accounts'!I1:I1", "'Transactions'!J1:K1", "'CC Beta'!K1:K1"])
   })
 
   it('reads payables once the tabs exist', () => {

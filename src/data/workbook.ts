@@ -114,7 +114,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     .map((r) => ({ payableId: text(r.payable_id), month: yearMonth(r.month), amount: money(r.amount), createdAt: text(r.created_at) }))
   const plannedExpenses = optional('PlannedExpenses')
     .filter((r) => text(r.item_id) && text(r.name))
-    .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), row: r.__row }))
+    .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), payableId: text(r.payable_id), row: r.__row }))
   const updates = sheetUpdates(availableTabs, headers, cards.map((c) => c.sheetTab).filter((t) => t && availableTabs.includes(t)))
 
   return {

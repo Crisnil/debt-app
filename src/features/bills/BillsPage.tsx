@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { stopPayable } from '../../data/actions'
+import { Link } from 'react-router-dom'
+import { addPlannedExpense, savePlannedExpense, stopPayable } from '../../data/actions'
 import { todayIso } from '../../domain/dues'
 import { billsThisMonth, type PayableMonth } from '../../domain/payables'
 import type { Workbook } from '../../domain/types'
@@ -13,8 +14,10 @@ import { WithWorkbook } from '../WithWorkbook'
 import { AddPayableForm, EditPayableForm, PayForm } from './PayableForms'
 
 const PAYABLE_TABS = ['Payables', 'PayableAmounts', 'Transactions']
+// The + Plan button needs the PlannedExpenses tab with its payable_id column.
+const canPlan = (wb: Workbook) => !wb.updates.some((u) => u.tab === 'PlannedExpenses')
 // Columns: #, name, due, amount, status, actions. On phones the row stacks.
-const COLS = 'md:grid md:grid-cols-[2rem_minmax(0,2fr)_6rem_8rem_8rem_minmax(0,14rem)] md:items-center md:gap-3'
+const COLS = 'md:grid md:grid-cols-[2rem_minmax(0,2fr)_6rem_8rem_8rem_minmax(0,20rem)] md:items-center md:gap-3'
 
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
@@ -22,6 +25,33 @@ function status(item: PayableMonth, today: string): { text: string; tone: string
   if (item.left === 0) return { text: '✓ Paid', tone: 'text-green-900' }
   if (item.dueDate < today) return { text: item.paid > 0 ? `▲ Late · ${formatPeso(item.paid)} paid` : '▲ Late', tone: 'text-red-800' }
   return { text: item.paid > 0 ? `${formatPeso(item.paid)} paid` : 'Not paid', tone: 'text-slate-600' }
+}
+
+/** + Plan adds the bill to the planned monthly expenses (the Plan line); ✓ In plan · Remove takes it out. */
+function PlanToggle({ sheetId, workbook, payable }: { sheetId: string; workbook: Workbook; payable: PayableMonth['payable'] }) {
+  const edit = useSheetEdit()
+  const line = workbook.plannedExpenses.find((e) => e.active && e.payableId === payable.payableId)
+  if (!line) {
+    return (
+      <Button variant="secondary" className="px-3 py-1.5" aria-label={`Add ${payable.name} to the plan`} onClick={() => addPlannedExpense(sheetId, payable.name, payable.amount, payable.payableId)}>
+        + Plan
+      </Button>
+    )
+  }
+  return (
+    <>
+      <Button
+        variant="secondary"
+        className="px-3 py-1.5"
+        aria-label={`Remove ${payable.name} from the plan`}
+        disabled={line.row === 0 || edit.busy}
+        onClick={() => void edit.run(`Removed ${payable.name} from the plan.`, (sid, wb, token) => savePlannedExpense(sid, wb, line.row, { name: line.name, amount: line.amount, active: false }, token))}
+      >
+        {edit.busy ? 'Removing…' : '✓ In plan · Remove'}
+      </Button>
+      <ErrorNote message={edit.error} />
+    </>
+  )
 }
 
 function BillRow({ sheetId, workbook, item, index, today }: { sheetId: string; workbook: Workbook; item: PayableMonth; index: number; today: string }) {
@@ -63,6 +93,7 @@ function BillRow({ sheetId, workbook, item, index, today }: { sheetId: string; w
               Pay
             </Button>
           )}
+          {canPlan(workbook) && p.active && <PlanToggle sheetId={sheetId} workbook={workbook} payable={p} />}
           <Button variant="secondary" className="px-3 py-1.5" disabled={!synced} onClick={() => setOpen(open === 'edit' ? null : 'edit')}>
             Edit
           </Button>
@@ -78,6 +109,7 @@ function BillRow({ sheetId, workbook, item, index, today }: { sheetId: string; w
         <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alertdialog" aria-label={`Delete ${p.name}`}>
           <p>
             <b>Delete {p.name}?</b> It will not show in the coming months. Payments you already made stay in your records.
+            {workbook.plannedExpenses.some((e) => e.active && e.payableId === p.payableId) && ' It also leaves your plan.'}
           </p>
           <div className="mt-2 flex gap-2">
             <Button
@@ -142,7 +174,16 @@ export function BillsView({ sheetId, workbook, today }: { sheetId: string; workb
           </>
         )}
       </div>
-      <p className="text-xs text-slate-500">Monthly payables come back by themselves on the 1st of each month. Card bills are on Cards.</p>
+      <p className="text-xs text-slate-500">
+        Monthly payables come back by themselves on the 1st of each month. Card bills are on Cards.{' '}
+        {canPlan(workbook) ? (
+          <>
+            + Plan adds a bill to your <Link to="/plan" className="underline">planned monthly expenses</Link> until its last payment.
+          </>
+        ) : (
+          'To add bills to your plan, open Settings → Update sheet.'
+        )}
+      </p>
     </section>
   )
 }
