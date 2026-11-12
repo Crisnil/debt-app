@@ -1,4 +1,4 @@
-import type { IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
+import type { BalanceCheck, IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
 import { addTabs, appendRows, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
 import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
@@ -187,6 +187,28 @@ export function addPlannedExpense(sheetId: string, name: string, amount: Centavo
     tab: 'PlannedExpenses',
     record: { item_id: value.itemId, name, amount: pesos(amount), active: true, note: '', payable_id: payableId },
     entity: { kind: 'plannedExpense', value },
+  })
+  return value
+}
+
+export type BalanceCheckInput = { date: IsoDate; accountId: string; balance: Centavos; countDifference: boolean; note: string }
+
+/** The real balance of an account. The app balance starts again from it. */
+export function addBalanceCheck(sheetId: string, input: BalanceCheckInput): BalanceCheck {
+  const value: BalanceCheck = { checkId: newId(), createdAt: now(), ...input }
+  enqueue(sheetId, {
+    key: value.checkId,
+    tab: 'BalanceChecks',
+    record: {
+      check_id: value.checkId,
+      created_at: value.createdAt,
+      date: value.date,
+      account_id: value.accountId,
+      balance: pesos(value.balance),
+      count_difference: value.countDifference,
+      note: value.note,
+    },
+    entity: { kind: 'balanceCheck', value },
   })
   return value
 }

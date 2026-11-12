@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState, useSyncExternalStore } from 'react'
 import { addAccount, addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
@@ -421,7 +422,12 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
       </div>
       <div className={card}>
         <h2 className="font-medium text-slate-900">Accounts</h2>
-        <p className="mt-1 text-sm text-slate-600">Balances count entries after the "as of" date. Use aliases only, never account numbers.</p>
+        <p className="mt-1 text-sm text-slate-600">
+          Balances count entries after the "as of" date, or after the last balance check. Use aliases only, never account numbers.
+        </p>
+        <Link to="/balances" className="mt-2 inline-block text-sm text-green-900 underline">
+          Check balances: type the real balance of each account
+        </Link>
         <ul className="mt-3 space-y-3">
           {accounts.map((a) => (
             <AccountRow key={a.accountId} account={a} balance={balances.get(a.accountId)} canMaintain={(workbook.headers.Accounts ?? []).includes('maintaining_balance')} />

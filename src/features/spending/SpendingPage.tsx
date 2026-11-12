@@ -17,6 +17,7 @@ const SOURCE: Record<SpendingItem['source'], string> = {
   both: 'logged · on statement ✓',
   expense: 'logged',
   statement: 'on statement',
+  check: 'lower than the app balance',
 }
 
 function barColor(row: CategorySpending) {

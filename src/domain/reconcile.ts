@@ -1,3 +1,4 @@
+import { checkResults } from './balances'
 import { cardForMethod, EWALLET_LOAD } from './accounts'
 import { billFor } from './billing'
 import { daysBetween } from './dues'
@@ -122,7 +123,10 @@ export function reconcileCard(wb: Workbook, cardId: string): Reconciliation {
  * expenses are always counted from the expense list. A cash-out from an e-wallet back to a bank lowers
  * "E-wallet load" spending (negative amount).
  */
-export type SpendingItem = { date: IsoDate; amount: number; category: string; label: string; methodId: string; source: 'expense' | 'statement' | 'both' }
+export type SpendingItem = { date: IsoDate; amount: number; category: string; label: string; methodId: string; source: 'expense' | 'statement' | 'both' | 'check' }
+
+/** Category of money that left an account without an entry, found by a balance check. */
+export const NOT_RECORDED = 'Not recorded'
 
 export function spendingItems(wb: Workbook): SpendingItem[] {
   const items: SpendingItem[] = []
@@ -147,6 +151,9 @@ export function spendingItems(wb: Workbook): SpendingItem[] {
   for (const i of wb.incomeLog) {
     if (i.type !== 'ewallet_return') continue
     items.push({ date: i.date, amount: -i.amount, category: EWALLET_LOAD, label: i.note || 'Cash-out from e-wallet', methodId: i.sourceId, source: 'expense' })
+  }
+  for (const r of checkResults(wb)) {
+    if (r.notRecorded > 0) items.push({ date: r.check.date, amount: r.notRecorded, category: NOT_RECORDED, label: `Balance check: ${r.account.label}`, methodId: r.account.accountId, source: 'check' })
   }
   return items.sort((a, b) => b.date.localeCompare(a.date))
 }

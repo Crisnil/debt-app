@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addIncome } from '../../data/actions'
 import { accountLabel } from '../../domain/accounts'
+import { accountsToCheck } from '../../domain/balances'
 import { moneyParts, moneyTotals } from '../../domain/home'
 import { incomeTypeFor, paydaysToRecord, type Payday } from '../../domain/payday'
 import type { IsoDate, Workbook } from '../../domain/types'
@@ -16,9 +17,11 @@ const panel = 'rounded-xl bg-white p-4 shadow-sm'
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
 /** What we have: one part per money account (banks, cash, e-wallets), with savings and spendable-now totals. */
-export function WhatWeHave({ workbook }: { workbook: Workbook }) {
+export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
   const parts = moneyParts(workbook)
   if (parts.length === 0) return null
+  const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
+  const unchecked = canCheck ? accountsToCheck(workbook, today.slice(0, 7)) : []
   const totals = moneyTotals(parts)
   // Colors follow the account order in the Accounts tab, not the size order.
   const order = workbook.accounts.filter((a) => a.type !== 'credit_card' && a.active).map((a) => a.accountId)
@@ -32,9 +35,14 @@ export function WhatWeHave({ workbook }: { workbook: Workbook }) {
     <div className={panel}>
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="font-medium text-slate-900">What we have</h2>
-        <Link to="/settings" className="text-sm text-green-900 underline">
-          Accounts
-        </Link>
+        <span className="space-x-3 text-sm">
+          <Link to="/balances" className="text-green-900 underline">
+            Check balances
+          </Link>
+          <Link to="/settings" className="text-green-900 underline">
+            Accounts
+          </Link>
+        </span>
       </div>
       <Donut parts={donut} centerLabel="have">
         <p className="mb-2 border-b border-slate-100 pb-2 text-sm text-slate-600">
@@ -42,7 +50,17 @@ export function WhatWeHave({ workbook }: { workbook: Workbook }) {
         </p>
       </Donut>
       {parts.some((p) => p.amount < 0) && <p className="mt-2 text-xs text-amber-900">! An account shows less than ₱0. Check its starting balance in Settings.</p>}
-      <p className="mt-2 text-xs text-slate-500">Balances count from each account&apos;s starting balance. Record paydays so they stay right.</p>
+      {unchecked.length > 0 && (
+        <p className="mt-2 text-sm text-slate-700">
+          Not checked this month: {unchecked.map((a) => a.label).join(', ')} ·{' '}
+          <Link to="/balances" className="text-green-900 underline">
+            Check now
+          </Link>
+        </p>
+      )}
+      <p className="mt-2 text-xs text-slate-500">
+        Balances count from each account&apos;s last balance check (or starting balance). Record paydays so they stay right.
+      </p>
     </div>
   )
 }
