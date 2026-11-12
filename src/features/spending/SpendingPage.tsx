@@ -7,7 +7,9 @@ import { categoryOf, filterSpending, paidFromOptions, spendingByCategory, spendi
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { monthLabel } from '../../ui/charts/palette'
-import { Field, Select } from '../../ui/form'
+import { Field, Select, SuccessNote } from '../../ui/form'
+import { Modal } from '../../ui/Modal'
+import { ItemDialogBody } from './ItemDialog'
 import { WithWorkbook } from '../WithWorkbook'
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
@@ -70,19 +72,26 @@ function BudgetCard({ rows, selected, onSelect }: { rows: CategorySpending[]; se
   )
 }
 
-function PurchaseList({ workbook, items }: { workbook: Workbook; items: SpendingItem[] }) {
+function PurchaseList({ workbook, items, onOpen }: { workbook: Workbook; items: SpendingItem[]; onOpen: (item: SpendingItem) => void }) {
   if (items.length === 0) return <p className="text-sm text-slate-500">Nothing here.</p>
   return (
     <ul className="divide-y divide-slate-100 text-sm">
       {items.map((i, n) => (
-        <li key={`${i.date}-${i.methodId}-${i.label}-${n}`} className="flex items-baseline justify-between gap-3 py-2">
-          <span className="min-w-0">
-            <span className="block truncate font-medium text-slate-900">{i.label || '(no description)'}</span>
-            <span className="block text-xs text-slate-500">
-              {shortDay(i.date)} · {categoryOf(i)} · {accountLabel(workbook, i.methodId)} · {SOURCE[i.source]}
+        <li key={`${i.date}-${i.methodId}-${i.label}-${n}`}>
+          <button
+            type="button"
+            onClick={() => onOpen(i)}
+            aria-label={`${i.label || '(no description)'} ${formatPeso(i.amount)}: edit or correct`}
+            className="-mx-2 flex w-[calc(100%+1rem)] items-baseline justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
+          >
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-slate-900">{i.label || '(no description)'}</span>
+              <span className="block text-xs text-slate-500">
+                {shortDay(i.date)} · {categoryOf(i)} · {accountLabel(workbook, i.methodId)} · {SOURCE[i.source]}
+              </span>
             </span>
-          </span>
-          <span className={`shrink-0 ${i.amount < 0 ? 'text-green-900' : 'text-slate-800'}`}>{formatPeso(i.amount)}</span>
+            <span className={`shrink-0 ${i.amount < 0 ? 'text-green-900' : 'text-slate-800'}`}>{formatPeso(i.amount)}</span>
+          </button>
         </li>
       ))}
     </ul>
@@ -90,8 +99,10 @@ function PurchaseList({ workbook, items }: { workbook: Workbook; items: Spending
 }
 
 /** Every purchase once (card statements + entries), with filters and budget vs actual per category. */
-export function SpendingView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
+export function SpendingView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: IsoDate }) {
   const all = spendingItems(workbook)
+  const [open, setOpen] = useState<SpendingItem | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
   const [month, setMonth] = useState(today.slice(0, 7))
   const [methodId, setMethodId] = useState('')
   const [category, setCategory] = useState('')
@@ -166,13 +177,36 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
               </button>
             )}
           </h2>
-          <PurchaseList workbook={workbook} items={shown} />
+          <p className="mb-2 text-xs text-slate-500">Tap a purchase to edit, delete, or correct it.</p>
+          <SuccessNote message={saved} />
+          <PurchaseList
+            workbook={workbook}
+            items={shown}
+            onOpen={(item) => {
+              setSaved(null)
+              setOpen(item)
+            }}
+          />
         </div>
       </div>
+      <Modal title={open ? open.label || 'Purchase' : ''} open={open !== null} onClose={() => setOpen(null)}>
+        {open && (
+          <ItemDialogBody
+            key={`${open.date}-${open.label}-${open.amount}`}
+            sheetId={sheetId}
+            workbook={workbook}
+            item={open}
+            onSaved={(message) => {
+              setOpen(null)
+              setSaved(message)
+            }}
+          />
+        )}
+      </Modal>
     </section>
   )
 }
 
 export function SpendingPage() {
-  return <WithWorkbook title="Spending">{(_sheetId, workbook) => <SpendingView workbook={workbook} today={todayIso()} />}</WithWorkbook>
+  return <WithWorkbook title="Spending">{(sheetId, workbook) => <SpendingView sheetId={sheetId} workbook={workbook} today={todayIso()} />}</WithWorkbook>
 }

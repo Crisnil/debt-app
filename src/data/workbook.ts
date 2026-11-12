@@ -116,7 +116,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     .filter((r) => text(r.item_id) && text(r.name))
     .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), payableId: text(r.payable_id), row: r.__row }))
   const balanceChecks = optional('BalanceChecks')
-    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date))
+    // A deleted check stays in the sheet with deleted_at set; the app ignores it.
+    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date) && !text(r.deleted_at))
     .map((r) => ({
       checkId: text(r.check_id),
       createdAt: text(r.created_at),
@@ -125,6 +126,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
       balance: money(r.balance),
       countDifference: text(r.count_difference) === '' ? true : bool(r.count_difference),
       note: text(r.note),
+      row: r.__row,
     }))
   const updates = sheetUpdates(availableTabs, headers, cards.map((c) => c.sheetTab).filter((t) => t && availableTabs.includes(t)))
 
@@ -170,7 +172,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         }
       }),
     transactions: rowsToObjects(values.Transactions)
-      .filter((r) => isoDate(r.date))
+      // A deleted expense stays in the sheet with deleted_at set; the app ignores it.
+      .filter((r) => isoDate(r.date) && !text(r.deleted_at))
       .map((r) => ({
         txnId: text(r.txn_id),
         date: isoDate(r.date),
@@ -181,6 +184,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         note: text(r.note),
         payableId: text(r.payable_id),
         payableMonth: yearMonth(r.payable_month),
+        row: r.__row,
       })),
     transfers: rowsToObjects(values.Transfers)
       .filter((r) => isoDate(r.date) && text(r.from_account) && text(r.to_account))

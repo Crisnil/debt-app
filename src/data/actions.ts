@@ -1,5 +1,5 @@
 import type { BalanceCheck, IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
-import { addTabs, appendRows, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
+import { addTabs, appendRows, getTabValues, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
 import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
 import { enqueue } from './outbox'
@@ -237,6 +237,65 @@ export async function stopPayable(sheetId: string, wb: Workbook, row: number, to
 }
 
 export type PayableEdit = Pick<Payable, 'name' | 'payee' | 'category' | 'amount' | 'dueDay' | 'times'>
+
+// ---- spending corrections (online only) -------------------------------------
+
+/**
+ * Reads the row again before a change. Stops when the row no longer holds this item
+ * (rows added, moved, or removed in the sheet since it was loaded).
+ */
+async function checkRow(sheetId: string, tab: string, idColumn: string, row: number | undefined, id: string, token: string) {
+  if (!row) throw new Error('This entry is not in the sheet yet. Wait until it is saved, then try again.')
+  const values = (await getTabValues(sheetId, [tab], token))[tab] ?? []
+  const index = (values[0] ?? []).map((h) => String(h).trim()).indexOf(idColumn)
+  if (index < 0 || String(values[row - 1]?.[index] ?? '').trim() !== id) throw new Error('The sheet changed. Reload the page and try again.')
+}
+
+function needColumn(wb: Workbook, tab: string, column: string) {
+  if (!(wb.headers[tab] ?? []).includes(column)) throw new Error(`Open Settings → Update sheet first (adds "${column}" to ${tab}).`)
+}
+
+export type ExpenseEdit = Pick<Transaction, 'date' | 'amount' | 'merchant' | 'category' | 'methodId' | 'note'>
+
+/** Changes a logged expense in its row of the Transactions tab. */
+export async function saveExpense(sheetId: string, wb: Workbook, txn: Transaction, edit: ExpenseEdit, token: string) {
+  await checkRow(sheetId, 'Transactions', 'txn_id', txn.row, txn.txnId, token)
+  const h = wb.headers.Transactions
+  const cell = (column: string, value: CellValue) => ({ range: cellRange('Transactions', h, column, txn.row!), values: [[value]] })
+  await updateCells(
+    sheetId,
+    [cell('date', edit.date), cell('amount', pesos(edit.amount)), cell('merchant', safeText(edit.merchant)), cell('category', safeText(edit.category)), cell('method_id', edit.methodId), cell('note', safeText(edit.note))],
+    token,
+  )
+}
+
+/** Deletes a logged expense: the row stays in the sheet with deleted_at set, and the app ignores it. */
+export async function deleteExpense(sheetId: string, wb: Workbook, txn: Transaction, token: string) {
+  needColumn(wb, 'Transactions', 'deleted_at')
+  await checkRow(sheetId, 'Transactions', 'txn_id', txn.row, txn.txnId, token)
+  await updateCells(sheetId, [{ range: cellRange('Transactions', wb.headers.Transactions, 'deleted_at', txn.row!), values: [[now()]] }], token)
+}
+
+/** Changes the category of a card statement line. The bank's description and amount stay. */
+export async function saveLineCategory(sheetId: string, wb: Workbook, line: StatementLine, category: string, token: string) {
+  const card = wb.cards.find((c) => c.cardId === line.cardId)
+  const headers = card ? wb.headers[card.sheetTab] : undefined
+  if (!card || !headers || line.row === 0) throw new Error('This line is not in the sheet yet. Wait until it is saved, then try again.')
+  await updateCells(sheetId, [{ range: cellRange(card.sheetTab, headers, 'category', line.row), values: [[safeText(category)]] }], token)
+}
+
+/** Counts (or stops counting) the difference of a balance check as Not recorded spending. */
+export async function saveCheckCount(sheetId: string, wb: Workbook, check: BalanceCheck, countDifference: boolean, token: string) {
+  await checkRow(sheetId, 'BalanceChecks', 'check_id', check.row, check.checkId, token)
+  await updateCells(sheetId, [{ range: cellRange('BalanceChecks', wb.headers.BalanceChecks, 'count_difference', check.row!), values: [[countDifference]] }], token)
+}
+
+/** Deletes a balance check: the row stays with deleted_at set. The balance goes back to the check before it. */
+export async function deleteBalanceCheck(sheetId: string, wb: Workbook, check: BalanceCheck, token: string) {
+  needColumn(wb, 'BalanceChecks', 'deleted_at')
+  await checkRow(sheetId, 'BalanceChecks', 'check_id', check.row, check.checkId, token)
+  await updateCells(sheetId, [{ range: cellRange('BalanceChecks', wb.headers.BalanceChecks, 'deleted_at', check.row!), values: [[now()]] }], token)
+}
 
 /** Changes a payable in place (its row in the Payables tab). */
 export async function savePayable(sheetId: string, wb: Workbook, row: number, edit: PayableEdit, token: string) {

@@ -30,8 +30,9 @@ export type OptionalTab = keyof typeof OPTIONAL_TABS
 export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
   Cards: ['credit_limit'],
   Accounts: ['maintaining_balance'],
-  Transactions: ['payable_id', 'payable_month'],
+  Transactions: ['payable_id', 'payable_month', 'deleted_at'],
   PlannedExpenses: ['payable_id'],
+  BalanceChecks: ['deleted_at'],
 }
 
 /** A tab to add (with its header row) or columns to add at the end of a tab's header row. */

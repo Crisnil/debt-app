@@ -3,7 +3,7 @@ import { cardForMethod, EWALLET_LOAD } from './accounts'
 import { billFor } from './billing'
 import { daysBetween } from './dues'
 import { isEwalletPayablePayment } from './payables'
-import type { IsoDate, StatementLine, Transaction, Workbook } from './types'
+import type { BalanceCheck, IsoDate, StatementLine, Transaction, Workbook } from './types'
 
 /** A statement line and an expense are the same purchase when the card and amount match and the dates are this close. */
 export const MATCH_DAYS = 3
@@ -123,7 +123,18 @@ export function reconcileCard(wb: Workbook, cardId: string): Reconciliation {
  * expenses are always counted from the expense list. A cash-out from an e-wallet back to a bank lowers
  * "E-wallet load" spending (negative amount).
  */
-export type SpendingItem = { date: IsoDate; amount: number; category: string; label: string; methodId: string; source: 'expense' | 'statement' | 'both' | 'check' }
+export type SpendingItem = {
+  date: IsoDate
+  amount: number
+  category: string
+  label: string
+  methodId: string
+  source: 'expense' | 'statement' | 'both' | 'check'
+  /** Where the item comes from, to edit or correct it: the logged expense, the statement line, or the balance check. */
+  txn?: Transaction
+  line?: StatementLine
+  check?: BalanceCheck
+}
 
 /** Category of money that left an account without an entry, found by a balance check. */
 export const NOT_RECORDED = 'Not recorded'
@@ -133,27 +144,27 @@ export function spendingItems(wb: Workbook): SpendingItem[] {
   for (const card of wb.cards) {
     const r = reconcileCard(wb, card.cardId)
     for (const { line, txn } of [...r.matched, ...r.probable]) {
-      items.push({ date: txn.date, amount: line.amount, category: txn.category || line.category, label: txn.merchant || line.description, methodId: card.cardId, source: 'both' })
+      items.push({ date: txn.date, amount: line.amount, category: txn.category || line.category, label: txn.merchant || line.description, methodId: card.cardId, source: 'both', txn, line })
     }
     for (const line of [...r.unlogged, ...r.beforeTracking, ...r.acknowledged]) {
-      items.push({ date: lineDate(line), amount: line.amount, category: line.category, label: line.description, methodId: card.cardId, source: 'statement' })
+      items.push({ date: lineDate(line), amount: line.amount, category: line.category, label: line.description, methodId: card.cardId, source: 'statement', line })
     }
     for (const t of [...r.unbilled, ...r.notOnStatement]) {
-      items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense' })
+      items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense', txn: t })
     }
   }
   for (const t of wb.transactions) {
     if (cardForMethod(wb, t.methodId)) continue
     // Paying a bill from GCash or Maya: the e-wallet load already counted this money.
     if (isEwalletPayablePayment(wb, t)) continue
-    items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense' })
+    items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense', txn: t })
   }
   for (const i of wb.incomeLog) {
     if (i.type !== 'ewallet_return') continue
     items.push({ date: i.date, amount: -i.amount, category: EWALLET_LOAD, label: i.note || 'Cash-out from e-wallet', methodId: i.sourceId, source: 'expense' })
   }
   for (const r of checkResults(wb)) {
-    if (r.notRecorded > 0) items.push({ date: r.check.date, amount: r.notRecorded, category: NOT_RECORDED, label: `Balance check: ${r.account.label}`, methodId: r.account.accountId, source: 'check' })
+    if (r.notRecorded > 0) items.push({ date: r.check.date, amount: r.notRecorded, category: NOT_RECORDED, label: `Balance check: ${r.account.label}`, methodId: r.account.accountId, source: 'check', check: r.check })
   }
   return items.sort((a, b) => b.date.localeCompare(a.date))
 }

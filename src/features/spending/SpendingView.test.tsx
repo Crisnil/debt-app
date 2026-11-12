@@ -12,7 +12,7 @@ const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 function renderSpending(today = '2030-01-21', workbook: Workbook = base) {
   return render(
     <MemoryRouter>
-      <SpendingView workbook={workbook} today={today} />
+      <SpendingView sheetId="s" workbook={workbook} today={today} />
     </MemoryRouter>,
   )
 }

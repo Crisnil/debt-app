@@ -32,7 +32,9 @@ describe('balance check', () => {
   it('counts money that went out without an entry as Not recorded spending', () => {
     const wb = withChecks(check('cash', '2030-01-13', 0))
     expect(checkResults(wb)).toEqual([expect.objectContaining({ expected: 5000, difference: -5000, notRecorded: 5000 })])
-    expect(spendingItems(wb)).toContainEqual({ date: '2030-01-13', amount: 5000, category: NOT_RECORDED, label: 'Balance check: Cash', methodId: 'cash', source: 'check' })
+    expect(spendingItems(wb)).toContainEqual(
+      expect.objectContaining({ date: '2030-01-13', amount: 5000, category: NOT_RECORDED, label: 'Balance check: Cash', methodId: 'cash', source: 'check', check: wb.balanceChecks[0] }),
+    )
   })
 
   it('compares each check with the one before it', () => {

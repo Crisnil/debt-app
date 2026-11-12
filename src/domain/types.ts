@@ -81,6 +81,8 @@ export type Transaction = {
   payableId?: string
   /** The month (YYYY-MM) of the payable that this expense pays. */
   payableMonth?: string
+  /** Sheet row number (1-based) in the Transactions tab. 0 or missing: not in the sheet yet. */
+  row?: number
 }
 
 /** A bill or money owed outside the credit cards. Recurring: every month from start_month, `times` times (null = no end). */
@@ -121,7 +123,17 @@ export type PayableAmount = { payableId: string; month: string; amount: Centavos
  * The app balance starts again from here. countDifference: a balance lower than expected is
  * "Not recorded" spending. false = a new starting balance (for example the first check).
  */
-export type BalanceCheck = { checkId: string; createdAt: string; date: IsoDate; accountId: string; balance: Centavos; countDifference: boolean; note: string }
+export type BalanceCheck = {
+  checkId: string
+  createdAt: string
+  date: IsoDate
+  accountId: string
+  balance: Centavos
+  countDifference: boolean
+  note: string
+  /** Sheet row number (1-based) in the BalanceChecks tab. 0 or missing: not in the sheet yet. */
+  row?: number
+}
 
 /** Money moved between two accounts. Not spending. */
 export type Transfer = { transferId: string; date: IsoDate; fromAccount: string; toAccount: string; amount: Centavos; note: string }
