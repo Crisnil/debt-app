@@ -4,6 +4,7 @@ import type { CardForecast } from './forecast'
 import { monthlyIncome } from './forecast'
 import { addMonths } from './payables'
 import { spendingItems } from './reconcile'
+import { WEEKS_PER_MONTH } from './spending'
 import type { IsoDate, Workbook } from './types'
 
 /** Good → watch → careful → bad. Each gauge maps its ratio to one of these. */
@@ -53,8 +54,6 @@ export type SpendingGauge = {
   /** Spent last month up to the same day. */
   lastMonth: Centavos
 }
-
-const WEEKS_PER_MONTH = 52 / 12
 
 /** Spending this month (each purchase once) against the budget for the days so far. */
 export function spendingGauge(wb: Workbook, today: IsoDate): SpendingGauge {

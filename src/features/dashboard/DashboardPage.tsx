@@ -207,11 +207,17 @@ function Tiles({ workbook, forecasts, today }: { workbook: Workbook; forecasts: 
   )
 }
 
-function Metric({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
+function Metric({ label, value, to, children }: { label: string; value: string; to?: string; children?: ReactNode }) {
   return (
     <div>
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+      {to ? (
+        <Link to={to} className="mt-1 block text-lg font-semibold text-green-900 underline decoration-green-900/30 underline-offset-4">
+          {value}
+        </Link>
+      ) : (
+        <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+      )}
       {children}
     </div>
   )
@@ -228,7 +234,7 @@ function ThisMonthRow({ workbook, forecasts, today }: { workbook: Workbook; fore
       <SectionHead title={`This month · ${monthLabel(month.month)}`} />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Metric label="Income (plan)" value={formatPeso(month.income)} />
-        <Metric label="Spent so far" value={formatPeso(spending.spent)}>
+        <Metric label="Spent so far" value={formatPeso(spending.spent)} to="/spending">
           {spendingH && <Badge health={spendingH} word={SPENDING_WORD[spendingH]} />}
           {spending.ratio !== null && (
             <p className="mt-0.5 text-xs text-slate-500">

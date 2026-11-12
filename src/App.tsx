@@ -7,6 +7,7 @@ import { DashboardPage } from './features/dashboard/DashboardPage'
 import { BillsPage } from './features/bills/BillsPage'
 import { PlanPage } from './features/plan/PlanPage'
 import { SettingsPage } from './features/settings/SettingsPage'
+import { SpendingPage } from './features/spending/SpendingPage'
 import { useSync } from './state/hooks'
 import { AddButton } from './ui/AddButton'
 import { MainNav } from './ui/MainNav'
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/cards/:cardId" element={<CardPage />} />
             <Route path="/reconcile/:cardId" element={<ReconcileRedirect />} />
             <Route path="/bills" element={<BillsPage />} />
+            <Route path="/spending" element={<SpendingPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
