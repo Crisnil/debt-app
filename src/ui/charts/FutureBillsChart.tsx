@@ -1,9 +1,34 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { MonthBills } from '../../domain/forecast'
 import { formatPeso } from '../../lib/money'
-import { monthLabel, niceStep, seriesColor, shortPeso } from './palette'
+import { monthLabel, niceStep, OTHER_COLOR, shortPeso } from './palette'
 
-type Series = { cardId: string; name: string }
+/** One stack in the chart: a card, or Bills & payables. The color comes from the card's row in the sheet. */
+export type BillSeries = { cardId: string; name: string; color: string }
+
+const OTHER = 'other'
+const sum = (values: number[]) => values.reduce((s, v) => s + v, 0)
+
+/** Series past the 7 colors (gray) go into one "Other" stack, so a color never repeats. One gray series keeps its name. */
+function foldOther(months: MonthBills[], series: BillSeries[]): { months: MonthBills[]; series: BillSeries[] } {
+  const rest = new Set(series.filter((s) => s.color === OTHER_COLOR).map((s) => s.cardId))
+  if (rest.size <= 1) return { months, series }
+  const names = series.filter((s) => rest.has(s.cardId)).map((s) => s.name)
+  return {
+    series: [...series.filter((s) => !rest.has(s.cardId)), { cardId: OTHER, name: `Other (${names.join(', ')})`, color: OTHER_COLOR }],
+    months: months.map((m) => {
+      const others = m.byCard.filter((c) => rest.has(c.cardId))
+      const other = {
+        cardId: OTHER,
+        committed: sum(others.map((c) => c.committed)),
+        estimate: sum(others.map((c) => c.estimate)),
+        bills: others.flatMap((c) => c.bills),
+        items: others.flatMap((c) => c.items ?? []),
+      }
+      return { ...m, byCard: [...m.byCard.filter((c) => !rest.has(c.cardId)), other] }
+    }),
+  }
+}
 
 const H = 220
 const PAD = { left: 44, right: 8, top: 22, bottom: 24 }
@@ -36,7 +61,9 @@ function useWidth(fallback: number) {
   return [ref, width] as const
 }
 
-export function FutureBillsChart({ months, series, income }: { months: MonthBills[]; series: Series[]; income: number }) {
+export function FutureBillsChart(props: { months: MonthBills[]; series: BillSeries[]; income: number }) {
+  const { months, series } = foldOther(props.months, props.series)
+  const income = props.income
   const [active, setActive] = useState(0)
   const [ref, W] = useWidth(360)
   const max = Math.max(income, ...months.map((m) => m.total), 1)
@@ -46,6 +73,8 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
   const plotH = H - PAD.top - PAD.bottom
   const band = plotW / months.length
   const barW = Math.min(24, band * 0.6)
+  // On a narrow phone the 12 month names touch: then name every other month.
+  const labelEvery = band < 28 ? 2 : 1
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step)
   const selected = months[active]
@@ -53,9 +82,9 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
   return (
     <div ref={ref}>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Legend">
-        {series.map((s, i) => (
+        {series.map((s) => (
           <li key={s.cardId} className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: seriesColor(i) }} /> {s.name}
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: s.color }} /> {s.name}
           </li>
         ))}
         <li className="flex items-center gap-1.5">
@@ -80,7 +109,7 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
           {series.map((s, i) => (
             <pattern key={s.cardId} id={`hatch-${i}`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="5" height="5" fill="#ffffff" />
-              <rect width="2" height="5" fill={seriesColor(i)} />
+              <rect width="2" height="5" fill={s.color} />
             </pattern>
           ))}
         </defs>
@@ -98,7 +127,7 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
           const x = PAD.left + mi * band + (band - barW) / 2
           // Segments bottom to top: each card's committed part, then its estimate.
           const segments = m.byCard.flatMap((c, ci) => [
-            { key: `${c.cardId}-c`, value: c.committed, fill: seriesColor(ci) },
+            { key: `${c.cardId}-c`, value: c.committed, fill: series[ci].color },
             { key: `${c.cardId}-e`, value: c.estimate, fill: `url(#hatch-${ci})` },
           ]).filter((s) => s.value > 0)
           let base = 0
@@ -116,9 +145,11 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
                   <rect key={s.key} x={x} y={y0 - h} width={barW} height={h} fill={s.fill} />
                 )
               })}
-              <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={mi === active ? '#0f172a' : '#64748b'}>
-                {monthLabel(m.month, false)}
-              </text>
+              {mi % labelEvery === 0 && (
+                <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={mi === active ? '#0f172a' : '#64748b'}>
+                  {monthLabel(m.month, false)}
+                </text>
+              )}
               {mi === 0 && m.total > 0 && (
                 <text x={x + barW / 2} y={y(m.total) - 6} textAnchor="middle" fontSize="11" fontWeight="600" fill="#0f172a">
                   {shortPeso(m.total)}
@@ -169,7 +200,7 @@ export function FutureBillsChart({ months, series, income }: { months: MonthBill
                 <li key={c.cardId}>
                   <p className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-slate-700">
-                      <span className="inline-block h-0.5 w-3" style={{ background: seriesColor(ci) }} />
+                      <span className="inline-block h-0.5 w-3" style={{ background: series[ci].color }} />
                       {series[ci].name}
                       {c.bills[0] && <span className="text-xs text-slate-500">due {c.bills.map((b) => b.bill.dueDate.slice(5)).join(', ')}</span>}
                     </span>

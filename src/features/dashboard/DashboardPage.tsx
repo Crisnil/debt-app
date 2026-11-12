@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { daysBetween, todayIso } from '../../domain/dues'
-import { forecastCards, PAYABLES } from '../../domain/forecast'
+import { forecastCards } from '../../domain/forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
 import { carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
 import { monthsUntil, payoffPaths } from '../../domain/payoff'
@@ -11,7 +11,7 @@ import { useLiveWorkbook, useSession } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { DebtSavingsBar } from '../../ui/charts/DebtSavingsBar'
 import { Donut } from '../../ui/charts/Donut'
-import { monthLabel, seriesColor, STATUS } from '../../ui/charts/palette'
+import { cardColor, monthLabel, STATUS } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 import { PaydayReminders, WhatWeHave } from './MoneyCards'
@@ -117,9 +117,8 @@ function Alerts({ workbook, forecasts, today }: { workbook: Workbook; forecasts:
 }
 
 function WhatWeOwe({ workbook, forecasts, owed }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; owed: ReturnType<typeof owedParts> }) {
-  // Same colors as the Plan chart: each card by its order in the Cards tab, payables in slot 4.
-  const color = (id: string) => (id === PAYABLES ? seriesColor(forecasts.length) : seriesColor(forecasts.findIndex((f) => f.card.cardId === id)))
-  const parts = owed.map((p) => ({ ...p, color: color(p.id) }))
+  // Same colors as the Plan chart: each card by its row in the Cards tab, payables in their own color.
+  const parts = owed.map((p) => ({ ...p, color: cardColor(workbook, p.id) }))
   const total = owed.reduce((s, p) => s + p.amount, 0)
   const debt = debtGauge(forecasts)
   const health = debt.used === null ? null : debtHealth(debt.used)

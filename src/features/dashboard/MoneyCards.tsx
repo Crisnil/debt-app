@@ -9,7 +9,7 @@ import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { Donut } from '../../ui/charts/Donut'
-import { seriesColor } from '../../ui/charts/palette'
+import { accountColor } from '../../ui/charts/palette'
 import { TextInput } from '../../ui/form'
 import { parsePositiveAmount } from '../add/parseAmount'
 
@@ -23,13 +23,15 @@ export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: Iso
   const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
   const unchecked = canCheck ? accountsToCheck(workbook, today.slice(0, 7)) : []
   const totals = moneyTotals(parts)
-  // Colors follow the account order in the Accounts tab, not the size order.
-  const order = workbook.accounts.filter((a) => a.type !== 'credit_card' && a.active).map((a) => a.accountId)
-  const donut = parts.map((p) => ({
+  // Colors and ring order follow the account's row in the Accounts tab, not its size, so neighbors in the ring
+  // are neighbors in the palette and a color never moves.
+  const order = workbook.accounts.filter((a) => a.type !== 'credit_card').map((a) => a.accountId)
+  const inSheetOrder = [...parts].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+  const donut = inSheetOrder.map((p) => ({
     id: p.id,
     name: `${p.name}${p.isSavings ? ' · savings' : ''}${p.maintaining > 0 ? ` · 🔒 ${formatPeso(p.maintaining)} maintaining` : ''}`,
     amount: Math.max(p.amount, 0),
-    color: seriesColor(order.indexOf(p.id)),
+    color: accountColor(workbook, p.id),
   }))
   return (
     <div className={panel}>

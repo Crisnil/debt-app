@@ -1,9 +1,9 @@
 import { formatPeso } from '../../lib/money'
-import { STATUS } from './palette'
+import { OWED_COLOR, SAVED_COLOR } from './palette'
 
-// Debt in the "bad" status color, savings in the "good" one. Both ends are labeled with words and amounts.
-const DEBT = STATUS.bad.fill
-const SAVINGS = STATUS.good.fill
+// Same colors as the payoff chart. Both ends are labeled with words and amounts.
+const DEBT = OWED_COLOR
+const SAVINGS = SAVED_COLOR
 
 /**
  * One bar split in two: what we owe and what we saved, each as its share of both together.
