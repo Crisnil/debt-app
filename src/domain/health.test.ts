@@ -3,7 +3,7 @@ import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { forecastCards } from './forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth } from './health'
-import type { Transaction, Workbook } from './types'
+import type { Payable, PlannedExpense, Transaction, Workbook } from './types'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
@@ -53,5 +53,20 @@ describe('gauges', () => {
     const wb: Workbook = { ...base, categories: base.categories.map((c) => ({ ...c, weeklyBudget: 0 })) }
     const g = spendingGauge(wb, '2030-01-31')
     expect(g).toMatchObject({ basis: 'income', pace: 4000000 })
+  })
+
+  it('uses the Plan when it has lines: bills in full after their due day, other lines spread over the month', () => {
+    const electric: Payable = { payableId: 'el', name: 'Electric', payee: '', category: 'Utilities', amount: 300000, recurring: true, dueDay: 15, startMonth: '2030-01', times: null, active: true, note: '', row: 2 }
+    const line = (itemId: string, amount: number, payableId = ''): PlannedExpense => ({ itemId, name: itemId, amount, active: true, payableId, row: 0 })
+    const wb: Workbook = { ...base, payables: [electric], plannedExpenses: [line('Grocery', 3100000), line('Electric', 300000, 'el')] }
+    // Jan 10: grocery 31,000 × 10/31 = 10,000; electric (due the 15th) not yet.
+    expect(spendingGauge(wb, '2030-01-10')).toMatchObject({ basis: 'plan', monthly: 3400000, pace: 1000000 })
+    // Jan 15: grocery 15,000 + electric 3,000.
+    expect(spendingGauge(wb, '2030-01-15')).toMatchObject({ basis: 'plan', pace: 1800000 })
+  })
+
+  it('falls back to the weekly budgets when the Plan has no amount', () => {
+    const wb: Workbook = { ...base, plannedExpenses: [{ itemId: 'x', name: 'Old', amount: 50000, active: false, payableId: '', row: 2 }] }
+    expect(spendingGauge(wb, '2030-01-10').basis).toBe('budget')
   })
 })

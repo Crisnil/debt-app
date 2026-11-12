@@ -4,14 +4,15 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { parseWorkbook } from '../../data/workbook'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
+import type { Workbook } from '../../domain/types'
 import { SpendingView } from './SpendingPage'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
-function renderSpending(today = '2030-01-21') {
+function renderSpending(today = '2030-01-21', workbook: Workbook = base) {
   return render(
     <MemoryRouter>
-      <SpendingView workbook={base} today={today} />
+      <SpendingView workbook={workbook} today={today} />
     </MemoryRouter>,
   )
 }
@@ -50,5 +51,12 @@ describe('Spending page', () => {
     expect(screen.getByText('Nothing here.')).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Month'), '2030-01')
     expect(purchases()).toHaveLength(4)
+  })
+
+  it('compares the month with the Plan total', async () => {
+    renderSpending('2030-01-21', { ...base, plannedExpenses: [{ itemId: 'g', name: 'Grocery', amount: 1000000, active: true, payableId: '', row: 2 }] })
+    expect(screen.getByText(/of the Plan/)).toHaveTextContent('47% of the Plan (₱10,000.00 for the month) · ₱5,349.75 left')
+    await userEvent.selectOptions(screen.getByLabelText('Paid from'), 'alpha')
+    expect(screen.queryByText(/of the Plan/)).not.toBeInTheDocument()
   })
 })
