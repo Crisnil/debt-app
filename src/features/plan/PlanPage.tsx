@@ -6,7 +6,7 @@ import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { FutureBillsChart } from '../../ui/charts/FutureBillsChart'
 import { PayoffChart, type ChartPath } from '../../ui/charts/PayoffChart'
-import { monthLabel } from '../../ui/charts/palette'
+import { cardColor, monthLabel } from '../../ui/charts/palette'
 import { WithWorkbook } from '../WithWorkbook'
 import { PlannedExpenses } from './PlannedExpenses'
 
@@ -16,7 +16,10 @@ const shortDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateStri
 
 function FutureBillsCard({ workbook, forecasts, today }: { workbook: Workbook; forecasts: CardForecast[]; today: string }) {
   const months = withPayables(billsByMonth(forecasts, today), workbook)
-  const series = [...forecasts.map((f) => ({ cardId: f.card.cardId, name: f.card.name })), { cardId: PAYABLES, name: 'Bills & payables' }]
+  const series = [...forecasts.map((f) => ({ cardId: f.card.cardId, name: f.card.name })), { cardId: PAYABLES, name: 'Bills & payables' }].map((s) => ({
+    ...s,
+    color: cardColor(workbook, s.cardId),
+  }))
   return (
     <div className={panel}>
       <h2 className="font-medium text-slate-900">Bills in the next 12 months</h2>

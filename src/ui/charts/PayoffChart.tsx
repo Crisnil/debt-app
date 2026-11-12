@@ -1,12 +1,13 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { PayoffMonth } from '../../domain/payoff'
 import { formatPeso } from '../../lib/money'
-import { monthLabel, niceStep, shortPeso, STATUS } from './palette'
+import { monthLabel, niceStep, OWED_COLOR, SAVED_COLOR, shortPeso } from './palette'
 
-const OWED = STATUS.bad.fill
-const SAVED = STATUS.good.fill
+const OWED = OWED_COLOR
+const SAVED = SAVED_COLOR
 const H = 240
-const PAD = { left: 48, right: 12, top: 16, bottom: 24 }
+// Right padding holds the Owed / Saved words beside the line ends.
+const PAD = { left: 48, right: 44, top: 16, bottom: 24 }
 
 /** One payoff path. The first path is the main one (marker and table). Dashed: a plan; solid: actual. */
 export type ChartPath = { key: string; label: string; dashed: boolean; months: PayoffMonth[] }
@@ -27,8 +28,9 @@ function useWidth(fallback: number) {
 }
 
 /**
- * What we still owe (red) and savings (green) month by month, on one peso axis, for one or more paths.
- * Line style tells the paths apart (solid / dashed), so color keeps one meaning. Tap a month for all values.
+ * What we still owe (orange) and savings (blue) month by month, on one peso axis, for one or more paths.
+ * Line style tells the paths apart (solid / dashed), so color keeps one meaning. The line ends have words too.
+ * Tap a month for all values. Keyboard: one tab stop, then the arrow keys (Home / End) move between months.
  */
 export function PayoffChart({ paths }: { paths: ChartPath[] }) {
   const [ref, W] = useWidth(360)
@@ -47,6 +49,25 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
   const main = paths[0]?.months ?? []
   const cross = main.findIndex((m) => m.savedTotal >= m.owed && m.savedTotal > 0)
   const band = plotW / Math.max(months.length - 1, 1)
+  // Word labels beside the end of the main path, kept 14px apart so they never overlap.
+  const last = main.length - 1
+  let owedY = last >= 0 ? y(main[last].owed) + 4 : 0
+  let savedY = last >= 0 ? y(main[last].savedTotal) + 4 : 0
+  if (Math.abs(owedY - savedY) < 14) {
+    const mid = (owedY + savedY) / 2
+    const owedAbove = main[last].owed >= main[last].savedTotal
+    owedY = Math.min(mid + (owedAbove ? -7 : 7), PAD.top + plotH + 4)
+    savedY = Math.min(mid + (owedAbove ? 7 : -7), PAD.top + plotH + 4)
+  }
+
+  function onKey(e: KeyboardEvent<SVGRectElement>, i: number) {
+    const next = { ArrowRight: i + 1, ArrowUp: i + 1, ArrowLeft: i - 1, ArrowDown: i - 1, Home: 0, End: months.length - 1 }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    const to = Math.min(Math.max(next, 0), months.length - 1)
+    setActive(to)
+    ;(e.currentTarget.parentNode?.querySelectorAll<SVGRectElement>('[data-month]')[to])?.focus()
+  }
 
   return (
     <div ref={ref}>
@@ -91,6 +112,16 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
             <path d={line(p.months, (m) => m.savedTotal)} fill="none" stroke={SAVED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" strokeDasharray={p.dashed ? '6 4' : undefined} />
           </g>
         ))}
+        {last > 0 && (
+          <g fontSize="11" fill="#334155" pointerEvents="none">
+            <text x={x(last) + 6} y={owedY}>
+              Owed
+            </text>
+            <text x={x(last) + 6} y={savedY}>
+              Saved
+            </text>
+          </g>
+        )}
         {cross > 0 && (
           <g>
             <circle cx={x(cross)} cy={y(main[cross].savedTotal)} r="5" fill={SAVED} stroke="#ffffff" strokeWidth="2" />
@@ -107,12 +138,14 @@ export function PayoffChart({ paths }: { paths: ChartPath[] }) {
             width={band}
             height={plotH}
             fill="transparent"
-            tabIndex={0}
+            data-month={m.month}
+            tabIndex={i === active ? 0 : -1}
             role="button"
             aria-label={`${monthLabel(m.month)}: ${paths.map((p) => `${p.label} still owed ${formatPeso(p.months[i]?.owed ?? 0)}, savings ${formatPeso(p.months[i]?.savedTotal ?? 0)}`).join('; ')}`}
             onPointerEnter={(e) => e.pointerType === 'mouse' && setActive(i)}
             onClick={() => setActive(i)}
             onFocus={() => setActive(i)}
+            onKeyDown={(e) => onKey(e, i)}
             style={{ outline: 'none', cursor: 'pointer' }}
           />
         ))}

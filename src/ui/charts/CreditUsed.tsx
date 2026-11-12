@@ -38,9 +38,10 @@ export function CreditUsedBar({ forecast: { card, owed, used }, showName = true 
         style={{ background: s.track }}
         role="meter"
         aria-label={`${card.name} credit used`}
-        aria-valuenow={pct}
+        aria-valuenow={Math.min(pct, 100)}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-valuetext={`${pct}%${used > 1 ? ', over the limit' : ''}`}
       >
         <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: s.fill }} />
       </div>
@@ -52,15 +53,3 @@ export function CreditUsedBar({ forecast: { card, owed, used }, showName = true 
   )
 }
 
-/** One bar per card. */
-export function CreditUsed({ forecasts }: { forecasts: CardForecast[] }) {
-  return (
-    <ul className="space-y-3">
-      {forecasts.map((f) => (
-        <li key={f.card.cardId}>
-          <CreditUsedBar forecast={f} />
-        </li>
-      ))}
-    </ul>
-  )
-}

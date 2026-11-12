@@ -1,13 +1,25 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { formatPeso } from '../../lib/money'
+import { OTHER_COLOR } from './palette'
 
 export type DonutPart = { id: string; name: string; amount: number; color: string; to?: string }
 
-const GAP = 1.2 // % of the ring left as surface between parts
+const GAP = 0.5 // % of the ring left as white surface between parts (about 2px at this size)
+const MAX_PARTS = 6
+
+/** At most 6 parts: the first 5 in the given order, then "Other" with the rest (and any gray part) together. */
+function foldOther(parts: DonutPart[]): DonutPart[] {
+  const colored = parts.filter((p) => p.color !== OTHER_COLOR)
+  const keep = parts.length > MAX_PARTS ? colored.slice(0, MAX_PARTS - 1) : colored
+  const rest = parts.filter((p) => !keep.includes(p))
+  if (rest.length <= 1) return parts.length > MAX_PARTS ? [...keep, ...rest] : parts
+  return [...keep, { id: 'other', name: `Other: ${rest.map((p) => p.name).join(', ')}`, amount: rest.reduce((s, p) => s + p.amount, 0), color: OTHER_COLOR }]
+}
 
 /** Ring of parts with the total in the middle and a legend with the amounts. The legend carries every value. */
-export function Donut({ parts, centerLabel, children }: { parts: DonutPart[]; centerLabel: string; children?: ReactNode }) {
+export function Donut({ parts: given, centerLabel, children }: { parts: DonutPart[]; centerLabel: string; children?: ReactNode }) {
+  const parts = foldOther(given)
   const total = parts.reduce((s, p) => s + p.amount, 0)
   const shares = parts.map((p) => (total > 0 ? (p.amount / total) * 100 : 0))
   const arcs = parts.map((p, i) => ({
@@ -21,7 +33,7 @@ export function Donut({ parts, centerLabel, children }: { parts: DonutPart[]; ce
     <div className="@container">
       <div className="grid items-center gap-4 @lg:grid-cols-[minmax(0,11rem)_1fr] @lg:gap-6">
         <svg viewBox="0 0 200 200" className="mx-auto w-44" role="img" aria-label={`${centerLabel}: ${formatPeso(total)}`}>
-          <circle cx="100" cy="100" r="78" fill="none" stroke="#f1f5f9" strokeWidth="26" />
+          <circle cx="100" cy="100" r="78" fill="none" stroke={total > 0 ? '#ffffff' : '#f1f5f9'} strokeWidth="26" />
           {arcs.map((a) => (
             <circle
               key={a.id}

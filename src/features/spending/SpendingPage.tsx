@@ -6,7 +6,7 @@ import { spendingItems, type SpendingItem } from '../../domain/reconcile'
 import { categoryOf, filterSpending, paidFromOptions, spendingByCategory, spendingMonths, type CategorySpending } from '../../domain/spending'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
-import { monthLabel } from '../../ui/charts/palette'
+import { monthLabel, OTHER_COLOR, STATUS } from '../../ui/charts/palette'
 import { Field, Select, SuccessNote } from '../../ui/form'
 import { Modal } from '../../ui/Modal'
 import { ItemDialogBody } from './ItemDialog'
@@ -23,10 +23,13 @@ const SOURCE: Record<SpendingItem['source'], string> = {
   check: 'lower than the app balance',
 }
 
-function barColor(row: CategorySpending) {
-  if (row.budget === 0) return 'bg-slate-400'
+/** Over, near, or within the budget: a status color with an icon and a word. Null without a budget. */
+function budgetStatus(row: CategorySpending): { fill: string; sign: string } | null {
+  if (row.budget === 0) return null
   const ratio = row.spent / row.budget
-  return ratio > 1 ? 'bg-red-700' : ratio > 0.9 ? 'bg-amber-500' : 'bg-green-800'
+  if (ratio > 1) return { fill: STATUS.bad.fill, sign: `${STATUS.bad.icon} over` }
+  if (ratio > 0.9) return { fill: STATUS.watch.fill, sign: `${STATUS.watch.icon} near` }
+  return { fill: STATUS.good.fill, sign: STATUS.good.icon }
 }
 
 function BudgetCard({ rows, selected, onSelect }: { rows: CategorySpending[]; selected: string; onSelect: (category: string) => void }) {
@@ -38,13 +41,16 @@ function BudgetCard({ rows, selected, onSelect }: { rows: CategorySpending[]; se
       <h2 className="font-medium text-slate-900">Budget vs actual</h2>
       <p className="mb-3 text-xs text-slate-500">
         Monthly budget = weekly budget in the Categories tab × 52 ÷ 12.
-        {budget > 0 && ` Total budget ${formatPeso(budget)}, spent ${formatPeso(spent)}.`} Tap a category to see its purchases.
+        {budget > 0 && ` Total budget ${formatPeso(budget)}, spent ${formatPeso(spent)}.`} ▲ over · ! near (more than 90%) · ✓ within. Tap a
+        category to see its purchases.
       </p>
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">No spending this month.</p>
       ) : (
         <ul className="space-y-2 text-sm">
-          {rows.map((r) => (
+          {rows.map((r) => {
+            const status = budgetStatus(r)
+            return (
             <li key={r.category}>
               <button
                 type="button"
@@ -57,15 +63,17 @@ function BudgetCard({ rows, selected, onSelect }: { rows: CategorySpending[]; se
                   <span className="text-slate-800">
                     {formatPeso(r.spent)}
                     <span className="text-xs text-slate-500">{r.budget > 0 ? ` of ${formatPeso(r.budget)}` : ' · no budget'}</span>
+                    {status && <span className="ml-1 text-xs text-slate-600">{status.sign}</span>}
                   </span>
                 </span>
                 <span className="relative mt-1 block h-2 rounded-full bg-slate-100">
-                  <span className={`absolute inset-y-0 left-0 rounded-full ${barColor(r)}`} style={{ width: `${(Math.max(r.spent, 0) / scale) * 100}%` }} />
+                  <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${(Math.max(r.spent, 0) / scale) * 100}%`, background: status?.fill ?? OTHER_COLOR }} />
                   {r.budget > 0 && <span className="absolute -inset-y-0.5 w-0.5 bg-slate-700" style={{ left: `${(r.budget / scale) * 100}%` }} />}
                 </span>
               </button>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </div>
