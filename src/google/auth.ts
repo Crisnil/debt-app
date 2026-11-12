@@ -5,8 +5,31 @@ export const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 
 type Token = { value: string; expiresAt: number }
 
-// The access token lives in memory only. It is never written to storage.
-let token: Token | null = null
+export const TOKEN_KEY = 'debt-app.token'
+
+// The access token is kept in sessionStorage so a reload keeps the sign-in for the rest of its hour.
+// sessionStorage belongs to this tab only and is cleared when the tab or app closes. Never localStorage.
+function readStoredToken(): Token | null {
+  try {
+    const raw = sessionStorage.getItem(TOKEN_KEY)
+    const t = raw ? (JSON.parse(raw) as Token) : null
+    return t && typeof t.value === 'string' && typeof t.expiresAt === 'number' && t.expiresAt > Date.now() ? t : null
+  } catch {
+    return null
+  }
+}
+
+function storeToken(t: Token | null) {
+  token = t
+  try {
+    if (t) sessionStorage.setItem(TOKEN_KEY, JSON.stringify(t))
+    else sessionStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // Storage blocked: the token stays in memory only.
+  }
+}
+
+let token: Token | null = readStoredToken()
 let client: google.accounts.oauth2.TokenClient | null = null
 let waiting: { resolve: (t: string) => void; reject: (e: Error) => void } | null = null
 
@@ -26,8 +49,9 @@ async function getClient() {
         return
       }
       // Renew one minute early.
-      token = { value: response.access_token, expiresAt: Date.now() + (response.expires_in - 60) * 1000 }
-      pending?.resolve(token.value)
+      const fresh = { value: response.access_token, expiresAt: Date.now() + (response.expires_in - 60) * 1000 }
+      storeToken(fresh)
+      pending?.resolve(fresh.value)
     },
     error_callback: (error) => {
       const pending = waiting
@@ -39,7 +63,9 @@ async function getClient() {
 }
 
 export function currentToken(): string | null {
-  return token && token.expiresAt > Date.now() ? token.value : null
+  if (token && token.expiresAt > Date.now()) return token.value
+  if (token) storeToken(null)
+  return null
 }
 
 /** Opens Google sign-in. Call from a button click so the popup is not blocked. */
@@ -55,10 +81,11 @@ export async function signIn(prompt: '' | 'consent' | 'select_account' = ''): Pr
 }
 
 export function clearToken() {
-  token = null
+  storeToken(null)
 }
 
 export function signOut() {
-  if (token) google.accounts.oauth2.revoke(token.value)
-  token = null
+  // After a reload the token can come from storage before the Google script is loaded.
+  if (token && typeof google !== 'undefined') google.accounts.oauth2.revoke(token.value)
+  storeToken(null)
 }
