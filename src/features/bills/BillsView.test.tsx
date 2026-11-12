@@ -63,6 +63,9 @@ function renderBills(today = '2030-03-15', workbook = wb) {
   )
 }
 
+const bodyRows = () => screen.getAllByRole('row').slice(1)
+const row = (name: string) => bodyRows().find((r) => within(r).queryByText(name))!
+
 describe('Bills table', () => {
   beforeEach(() => localStorage.clear())
 
@@ -79,44 +82,72 @@ describe('Bills table', () => {
     ])
   })
 
-  it('shows one row per payable with Pay, Edit, and Delete, and no Pay once paid', () => {
+  it('shows one table row per payable with Pay and Edit, and no Pay once paid', () => {
     renderBills()
-    const rows = screen.getAllByRole('listitem')
-    expect(rows).toHaveLength(3)
-    expect(within(rows[0]).getByText('▲ Late')).toBeInTheDocument()
-    const water = rows.find((r) => within(r).queryByText('Sample water'))!
-    expect(within(water).getByText('✓ Paid')).toBeInTheDocument()
-    expect(within(water).queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument()
-    const electric = rows.find((r) => within(r).queryByText('Sample electric'))!
-    expect(within(electric).getByRole('button', { name: 'Pay' })).toBeInTheDocument()
-    expect(within(electric).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(bodyRows()).toHaveLength(3)
+    expect(within(bodyRows()[0]).getAllByText('▲ Late').length).toBeGreaterThan(0)
+    expect(within(row('Sample water')).getAllByText('✓ Paid').length).toBeGreaterThan(0)
+    expect(within(row('Sample water')).queryByRole('button', { name: 'Pay Sample water' })).not.toBeInTheDocument()
+    expect(within(row('Sample electric')).getByRole('button', { name: 'Pay Sample electric' })).toBeInTheDocument()
+    expect(within(row('Sample electric')).getByRole('button', { name: 'Edit Sample electric' })).toBeInTheDocument()
     expect(screen.getByText('₱2,000.00')).toBeInTheDocument() // left this month: repair 1,000 + electric 1,000 (water is paid)
   })
 
-  it('asks before deleting and says that past payments stay', async () => {
+  it('pays a bill in a pop-up and shows what was saved', async () => {
     renderBills()
-    const electric = screen.getAllByRole('listitem').find((r) => within(r).queryByText('Sample electric'))!
-    await userEvent.click(within(electric).getByRole('button', { name: 'Delete' }))
-    expect(within(electric).getByRole('alertdialog', { name: 'Delete Sample electric' })).toHaveTextContent('Payments you already made stay in your records.')
-    await userEvent.click(within(electric).getByRole('button', { name: 'Cancel' }))
-    expect(within(electric).queryByRole('alertdialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Pay Sample electric' }))
+    const dialog = screen.getByRole('dialog', { name: 'Pay Sample electric' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save payment' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Paid Sample electric.')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('debt-app.outbox.s')!)).toContainEqual(
+      expect.objectContaining({ entity: expect.objectContaining({ value: expect.objectContaining({ amount: 100000, payableId: 'elec', payableMonth: '2030-03' }) }) }),
+    )
+  })
+
+  it('adds a payable in a pop-up', async () => {
+    renderBills()
+    await userEvent.click(screen.getByRole('button', { name: '+ Add payable' }))
+    const dialog = screen.getByRole('dialog', { name: 'Add payable' })
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Sample internet')
+    await userEvent.type(within(dialog).getByLabelText('Usual amount per month (₱)'), '1500')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add payable' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Added Sample internet.')).toBeInTheDocument()
+  })
+
+  it('asks before deleting in the Edit pop-up and says that past payments stay', async () => {
+    renderBills()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Sample electric' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit Sample electric' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    expect(within(dialog).getByRole('alertdialog', { name: 'Delete Sample electric' })).toHaveTextContent('Payments you already made stay in your records.')
+    await userEvent.click(within(within(dialog).getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+    expect(within(dialog).queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('adds a bill to the plan with + Plan, and shows In plan · Remove once it is there', async () => {
     const inPlan: Workbook = { ...wb, updates: [], plannedExpenses: [{ itemId: 'i', name: 'Sample water', amount: 100000, active: true, payableId: 'water', row: 2 }] }
     renderBills('2030-03-15', inPlan)
-    const row = (name: string) => screen.getAllByRole('listitem').find((r) => within(r).queryByText(name))!
-    expect(within(row('Sample water')).getByRole('button', { name: 'Remove Sample water from the plan' })).toHaveTextContent('✓ In plan · Remove')
-    await userEvent.click(within(row('Sample electric')).getByRole('button', { name: 'Add Sample electric to the plan' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Sample water' }))
+    let dialog = screen.getByRole('dialog', { name: 'Edit Sample water' })
+    expect(within(dialog).getByRole('button', { name: 'Remove Sample water from the plan' })).toHaveTextContent('✓ In plan · Remove')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    expect(within(dialog).getByRole('alertdialog')).toHaveTextContent('It also leaves your plan.')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Sample electric' }))
+    dialog = screen.getByRole('dialog', { name: 'Edit Sample electric' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add Sample electric to the plan' }))
+    expect(screen.getByText('Added Sample electric to the plan.')).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('debt-app.outbox.s')!)).toContainEqual(
       expect.objectContaining({ tab: 'PlannedExpenses', record: expect.objectContaining({ name: 'Sample electric', amount: 1000, payable_id: 'elec' }) }),
     )
-    await userEvent.click(within(row('Sample water')).getByRole('button', { name: 'Delete' }))
-    expect(within(row('Sample water')).getByRole('alertdialog')).toHaveTextContent('It also leaves your plan.')
   })
 
-  it('hides + Plan until the sheet has the planned expenses column', () => {
+  it('hides + Plan until the sheet has the planned expenses column', async () => {
     renderBills()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Sample electric' }))
     expect(screen.queryByRole('button', { name: /to the plan$/ })).not.toBeInTheDocument()
     expect(screen.getByText(/To add bills to your plan, open Settings → Update sheet/)).toBeInTheDocument()
   })

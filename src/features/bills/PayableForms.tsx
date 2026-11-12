@@ -9,11 +9,11 @@ import { toPesos } from '../../lib/money'
 import { useSheetEdit } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
+import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from '../add/parseAmount'
 
 /** Pay one month of a payable. Saved as an expense linked to the payable. A card payment shows on that card's bill. */
-export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; workbook: Workbook; item: PayableMonth; onDone: () => void }) {
+export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; workbook: Workbook; item: PayableMonth; onDone: (message?: string) => void }) {
   const methods = workbook.accounts.filter((a) => a.active)
   const [amount, setAmount] = useState(toPesos(item.left).toFixed(2))
   const [methodId, setMethodId] = useState(methods.find((a) => a.type === 'cash')?.accountId ?? methods[0]?.accountId ?? 'cash')
@@ -38,11 +38,11 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
       payableId: p.payableId,
       payableMonth: item.month,
     })
-    onDone()
+    onDone(`Paid ${p.name}.`)
   }
 
   return (
-    <form onSubmit={submit} className="mt-2 space-y-3 rounded-lg bg-slate-50 p-3" noValidate>
+    <form onSubmit={submit} className="space-y-3" noValidate>
       <Field label="Amount paid (₱)" htmlFor={`pay-${item.payable.payableId}-${item.month}`}>
         <AmountInput id={`pay-${item.payable.payableId}-${item.month}`} value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
@@ -58,7 +58,7 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
       </Field>
       <div className="flex gap-2">
         <Button type="submit">Save payment</Button>
-        <Button variant="secondary" onClick={onDone}>
+        <Button variant="secondary" onClick={() => onDone()}>
           Cancel
         </Button>
       </div>
@@ -71,7 +71,7 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
  * Edit a payable: name, pay to, category, usual amount, due day, times, and (recurring, this month) this month's amount.
  * Changes count from this month on: earlier months with a payment keep their amount, so they stay paid.
  */
-export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook; item: PayableMonth; onDone: () => void }) {
+export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook; item: PayableMonth; onDone: (message?: string) => void }) {
   const p = item.payable
   const edit = useSheetEdit()
   const categories = [...new Set([p.category, ...PAYABLE_CATEGORIES, ...expenseCategories(workbook)].filter(Boolean))]
@@ -86,7 +86,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
   const [times, setTimes] = useState(p.times?.toString() ?? '')
   const id = `${p.payableId}-${item.month}`
 
-  function save(e: FormEvent) {
+  async function save(e: FormEvent) {
     e.preventDefault()
     const usual = parsePositiveAmount(amount)
     const forMonth = showMonth ? parsePositiveAmount(monthAmount) : usual
@@ -96,18 +96,19 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
     if (usual === null || forMonth === null) return edit.fail('Enter amounts more than 0.')
     if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return edit.fail('Enter a due day from 1 to 31.')
     if (count !== null && (!Number.isInteger(count) || count < 1)) return edit.fail('Enter how many times as a whole number, or leave it empty.')
-    void edit.run(`Saved ${name.trim()}.`, async (sheetId, wb, token) => {
+    const message = `Saved ${name.trim()}.`
+    const ok = await edit.run(message, async (sheetId, wb, token) => {
       if (usual !== p.amount) for (const keep of monthsToKeep(workbook, p, todayIso())) setPayableAmount(sheetId, p.payableId, keep.month, keep.amount)
       await savePayable(sheetId, wb, p.row, { name: name.trim(), payee: payee.trim(), category, amount: usual, dueDay: day, times: count }, token)
       // This month's amount after the save would be the one set before, or else the new usual amount.
       const wouldBe = item.amountSet ? item.amount : usual
       if (showMonth && forMonth !== wouldBe) setPayableAmount(sheetId, p.payableId, item.month, forMonth)
-      onDone()
     })
+    if (ok) onDone(message)
   }
 
   return (
-    <form onSubmit={save} className="mt-2 space-y-3 rounded-lg bg-slate-50 p-3" noValidate>
+    <form onSubmit={(e) => void save(e)} className="space-y-3" noValidate>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Name" htmlFor={`ed-name-${id}`}>
           <TextInput id={`ed-name-${id}`} value={name} onChange={(e) => setName(e.target.value)} />
@@ -142,7 +143,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
         <Button type="submit" disabled={edit.busy}>
           {edit.busy ? 'Saving…' : 'Save changes'}
         </Button>
-        <Button variant="secondary" disabled={edit.busy} onClick={onDone}>
+        <Button variant="secondary" disabled={edit.busy} onClick={() => onDone()}>
           Cancel
         </Button>
       </div>
@@ -152,7 +153,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
 }
 
 /** New payable: a bill or money owed. Recurring: every month, a number of times or with no end. One-time: one due date. */
-export function AddPayableForm({ sheetId, workbook }: { sheetId: string; workbook: Workbook }) {
+export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string; workbook: Workbook; onSaved: (message: string) => void }) {
   const categories = [...new Set([...PAYABLE_CATEGORIES, ...expenseCategories(workbook)])]
   const thisMonth = todayIso().slice(0, 7)
   const [name, setName] = useState('')
@@ -166,11 +167,9 @@ export function AddPayableForm({ sheetId, workbook }: { sheetId: string; workboo
   const [dueDate, setDueDate] = useState(todayIso())
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    setSaved(null)
     const cents = parsePositiveAmount(amount)
     if (!name.trim()) return setError('Enter a name, for example "Electric".')
     if (cents === null) return setError('Enter an amount more than 0.')
@@ -182,12 +181,7 @@ export function AddPayableForm({ sheetId, workbook }: { sheetId: string; workboo
     if (!/^\d{4}-\d{2}$/.test(start)) return setError(recurring ? 'Enter the first month.' : 'Enter the due date.')
     setError(null)
     addPayable(sheetId, { name: name.trim(), payee: payee.trim(), category, amount: cents, recurring, dueDay: day, startMonth: start, times: count, note: note.trim() })
-    setSaved(`Added ${name.trim()}.`)
-    setName('')
-    setPayee('')
-    setAmount('')
-    setTimes('')
-    setNote('')
+    onSaved(`Added ${name.trim()}.`)
   }
 
   return (
@@ -239,7 +233,6 @@ export function AddPayableForm({ sheetId, workbook }: { sheetId: string; workboo
         Add payable
       </Button>
       <ErrorNote message={error} />
-      <SuccessNote message={saved} />
     </form>
   )
 }
