@@ -15,33 +15,15 @@ import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { AmountInput, Field, Select, SuccessNote, TextInput } from '../../ui/form'
+import { SectionHead } from '../../ui/SectionHead'
+import { editButton, th, type Editing } from '../../ui/table'
 import { parsePositiveAmount } from '../add/parseAmount'
 
 const card = 'rounded-xl bg-white p-4 shadow-sm'
 
-
 const pesoCents = (text: string) => (text.trim() === '' ? 0 : Math.round(Number(text.replace(/,/g, '')) * 100))
 
 const shortDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
-
-const th = 'py-1.5 text-xs font-medium text-slate-500'
-const editButton = 'rounded-md px-2 py-1 text-sm text-green-900 underline hover:bg-green-50'
-
-/** Which pop-up is open: a new item, an item to edit, or none. */
-type Editing<T> = { item: T | null } | null
-
-function SectionHead({ title, addLabel, onAdd }: { title: string; addLabel?: string; onAdd?: () => void }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <h2 className="font-medium text-slate-900">{title}</h2>
-      {onAdd && (
-        <button type="button" className="text-sm text-green-900 underline" onClick={onAdd}>
-          {addLabel}
-        </button>
-      )}
-    </div>
-  )
-}
 
 // ---- income ---------------------------------------------------------------
 

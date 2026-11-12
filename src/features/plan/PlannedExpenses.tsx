@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addPlannedExpense, savePlannedExpense } from '../../data/actions'
 import { billsNotInPlan, linkedPayable, payableLastMonth, plannedLineDone, plannedLiving } from '../../domain/payoff'
@@ -8,7 +8,10 @@ import { useSheetEdit } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { monthLabel } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { TextInput } from '../../ui/form'
+import { Field, SuccessNote, TextInput } from '../../ui/form'
+import { Modal } from '../../ui/Modal'
+import { SectionHead } from '../../ui/SectionHead'
+import { editButton, th, type Editing } from '../../ui/table'
 import { parsePositiveAmount } from '../add/parseAmount'
 import { SheetUpdateCard } from '../settings/SheetUpdateCard'
 
@@ -23,116 +26,75 @@ function billTag(workbook: Workbook, item: PlannedExpense, month: string): strin
   return `🔗 Bills · ${when}`
 }
 
-function Row({ item, tag }: { item: PlannedExpense; tag: string | null }) {
+/** Add a planned expense (saved on this phone first, then to the sheet), or edit or remove one (online). */
+function PlannedForm({ sheetId, item, onSaved }: { sheetId: string; item: PlannedExpense | null; onSaved: (message: string) => void }) {
   const edit = useSheetEdit()
-  const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
-  const [name, setName] = useState(item.name)
-  const [amount, setAmount] = useState(toPesos(item.amount).toFixed(2))
-  const synced = item.row > 0
+  const [name, setName] = useState(item?.name ?? '')
+  const [amount, setAmount] = useState(item ? toPesos(item.amount).toFixed(2) : '')
+  const [removing, setRemoving] = useState(false)
 
-  function save(e: FormEvent) {
-    e.preventDefault()
+  async function save() {
     const cents = parsePositiveAmount(amount)
-    if (!name.trim()) return edit.fail('Enter a name.')
+    if (!name.trim()) return edit.fail('Enter a name, for example "Grocery".')
     if (cents === null) return edit.fail('Enter an amount more than 0.')
-    void edit.run(`Saved ${name.trim()}.`, async (sheetId, wb, token) => {
-      await savePlannedExpense(sheetId, wb, item.row, { name: name.trim(), amount: cents, active: true }, token)
-      setMode('view')
-    })
+    if (!item) {
+      addPlannedExpense(sheetId, name.trim(), cents)
+      return onSaved(`Added ${name.trim()}.`)
+    }
+    const message = `Saved ${name.trim()}.`
+    const ok = await edit.run(message, (sid, wb, token) => savePlannedExpense(sid, wb, item.row, { name: name.trim(), amount: cents, active: true }, token))
+    if (ok) onSaved(message)
+  }
+
+  async function remove(line: PlannedExpense) {
+    const message = `Removed ${line.name}.`
+    const ok = await edit.run(message, (sid, wb, token) => savePlannedExpense(sid, wb, line.row, { name: line.name, amount: line.amount, active: false }, token))
+    if (ok) onSaved(message)
   }
 
   return (
-    <li className="border-t border-slate-100 py-2 first:border-0">
-      {mode === 'edit' ? (
-        <form onSubmit={save} className="flex flex-wrap items-center gap-2" noValidate>
-          <TextInput aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <TextInput aria-label="Amount per month (₱)" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <div className="flex gap-2">
-            <Button type="submit" className="px-3 py-1.5" disabled={edit.busy}>
-              {edit.busy ? 'Saving…' : 'Save'}
-            </Button>
-            <Button variant="secondary" className="px-3 py-1.5" onClick={() => setMode('view')}>
-              Cancel
-            </Button>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Name" htmlFor="pe-name">
+          <TextInput id="pe-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Grocery" />
+        </Field>
+        <Field label="Per month (₱)" htmlFor="pe-amount">
+          <TextInput id="pe-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="5,000" />
+        </Field>
+      </div>
+      <Button className="w-full" disabled={edit.busy} onClick={() => void save()}>
+        {edit.busy ? 'Saving…' : item ? 'Save' : 'Add to the plan'}
+      </Button>
+      {item &&
+        (removing ? (
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-900" role="alertdialog" aria-label={`Remove ${item.name}`}>
+            <p>Remove {item.name} from the plan?</p>
+            <div className="mt-2 flex gap-2">
+              <Button variant="danger" disabled={edit.busy} onClick={() => void remove(item)}>
+                {edit.busy ? 'Removing…' : 'Yes, remove'}
+              </Button>
+              <Button variant="secondary" disabled={edit.busy} onClick={() => setRemoving(false)}>
+                Cancel
+              </Button>
+            </div>
           </div>
-        </form>
-      ) : (
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-slate-800">
-            {item.name}
-            {tag && <span className="block text-xs text-slate-500">{tag}</span>}
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <b className="text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {formatPeso(item.amount)}
-            </b>
-            <Button variant="secondary" className="px-3 py-1.5" disabled={!synced} onClick={() => setMode('edit')}>
-              Edit
-            </Button>
-            <Button variant="danger" className="px-3 py-1.5" disabled={!synced} onClick={() => setMode('delete')}>
-              Delete
-            </Button>
-          </span>
-        </div>
-      )}
-      {mode === 'delete' && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 p-2 text-sm text-red-900" role="alertdialog" aria-label={`Delete ${item.name}`}>
-          Remove {item.name} from the plan?
-          <Button
-            variant="danger"
-            className="px-3 py-1.5"
-            disabled={edit.busy}
-            onClick={() => void edit.run(`Removed ${item.name}.`, (sheetId, wb, token) => savePlannedExpense(sheetId, wb, item.row, { name: item.name, amount: item.amount, active: false }, token))}
-          >
-            {edit.busy ? 'Removing…' : 'Yes, remove'}
-          </Button>
-          <Button variant="secondary" className="px-3 py-1.5" onClick={() => setMode('view')}>
-            Cancel
-          </Button>
-        </div>
-      )}
+        ) : (
+          <button type="button" className="text-sm text-red-800 underline" onClick={() => setRemoving(true)}>
+            Remove from the plan
+          </button>
+        ))}
       <ErrorNote message={edit.error} />
-    </li>
-  )
-}
-
-function AddRow({ sheetId }: { sheetId: string }) {
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  function add(e: FormEvent) {
-    e.preventDefault()
-    const cents = parsePositiveAmount(amount)
-    if (!name.trim()) return setError('Enter a name, for example "Grocery".')
-    if (cents === null) return setError('Enter an amount more than 0.')
-    setError(null)
-    addPlannedExpense(sheetId, name.trim(), cents)
-    setName('')
-    setAmount('')
-  }
-
-  return (
-    <form onSubmit={add} className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3" noValidate>
-      <div className="min-w-0 flex-1">
-        <TextInput aria-label="New planned expense" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Grocery" />
-      </div>
-      <div className="w-32">
-        <TextInput aria-label="Amount per month (₱)" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="5,000" />
-      </div>
-      <Button type="submit">+ Add</Button>
-      <div className="w-full">
-        <ErrorNote message={error} />
-      </div>
-    </form>
+    </div>
   )
 }
 
 /**
- * Your planned monthly expenses (a guide). Their total is the living cost of the Plan line on the payoff chart.
+ * Your planned monthly expenses (a guide), in a table. Their total is the living cost of the Plan line on the payoff chart.
  * Lines added from Bills count only while the bill runs, and are hidden after its last payment.
  */
 export function PlannedExpenses({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: string }) {
+  const [editing, setEditing] = useState<Editing<PlannedExpense>>(null)
+  const [saved, setSaved] = useState<string | null>(null)
   if (workbook.updates.some((u) => u.tab === 'PlannedExpenses' && u.create)) {
     return <SheetUpdateCard workbook={workbook} why="Planned monthly expenses need a new tab in your sheet." />
   }
@@ -140,27 +102,57 @@ export function PlannedExpenses({ sheetId, workbook, today }: { sheetId: string;
   const items = workbook.plannedExpenses.filter((e) => e.active && !plannedLineDone(workbook, e, month))
   const total = plannedLiving(workbook, month) ?? 0
   const missing = workbook.updates.some((u) => u.tab === 'PlannedExpenses') ? [] : billsNotInPlan(workbook)
+  const open = (item: PlannedExpense | null) => {
+    setSaved(null)
+    setEditing({ item })
+  }
   return (
     <div className={panel}>
-      <h2 className="font-medium text-slate-900">Planned monthly expenses</h2>
-      <p className="mb-2 text-xs text-slate-500">Your guide for living costs each month (groceries, utilities, subscriptions, others). The Plan line on the chart uses the total.</p>
+      <SectionHead title="Planned monthly expenses" addLabel="+ Add expense" onAdd={() => open(null)} />
+      <p className="mt-1 text-xs text-slate-500">Your guide for living costs each month (groceries, utilities, subscriptions, others). The Plan line on the chart uses the total.</p>
       {items.length === 0 ? (
-        <p className="text-sm text-slate-600">No planned expenses yet.</p>
+        <p className="mt-2 text-sm text-slate-600">No planned expenses yet.</p>
       ) : (
-        <ul className="text-sm">
-          {items.map((item) => (
-            <Row key={item.itemId} item={item} tag={billTag(workbook, item, month)} />
-          ))}
-        </ul>
+        <table className="mt-2 w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <thead>
+            <tr className="border-b border-slate-100 text-left">
+              <th className={th}>Expense</th>
+              <th className={`${th} text-right`}>Per month</th>
+              <th className={th}>
+                <span className="sr-only">Edit</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((item) => {
+              const tag = billTag(workbook, item, month)
+              return (
+                <tr key={item.itemId}>
+                  <td className="py-2">
+                    <span className="font-medium text-slate-900">{item.name}</span>
+                    {tag && <span className="block text-xs text-slate-500">{tag}</span>}
+                    {item.row === 0 && <span className="block text-xs text-slate-500">Saving to the sheet…</span>}
+                  </td>
+                  <td className="py-2 text-right text-slate-900">{formatPeso(item.amount)}</td>
+                  <td className="py-2 text-right">
+                    <button type="button" className={editButton} aria-label={`Edit ${item.name}`} disabled={item.row === 0} onClick={() => open(item)}>
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-slate-200">
+              <td className="pt-2 font-medium text-slate-900">Total this month</td>
+              <td className="pt-2 text-right font-semibold text-slate-900">{formatPeso(total)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
       )}
-      {items.length > 0 && (
-        <p className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm">
-          <span className="font-medium text-slate-900">Total this month</span>
-          <b className="text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {formatPeso(total)}
-          </b>
-        </p>
-      )}
+      <SuccessNote message={saved} />
       {missing.length > 0 && (
         <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
           {missing.length === 1 ? '1 monthly bill is' : `${missing.length} monthly bills are`} not in your plan: {missing.map((p) => p.name).join(', ')}. Add{' '}
@@ -171,8 +163,18 @@ export function PlannedExpenses({ sheetId, workbook, today }: { sheetId: string;
           .
         </p>
       )}
-      <AddRow sheetId={sheetId} />
       {workbook.updates.some((u) => u.tab === 'PlannedExpenses') && <p className="mt-2 text-xs text-slate-500">To add bills from the Bills page, open Settings → Update sheet.</p>}
+      <Modal title={editing?.item ? `Edit ${editing.item.name}` : 'Add planned expense'} open={editing !== null} onClose={() => setEditing(null)}>
+        <PlannedForm
+          key={editing?.item?.itemId ?? 'new'}
+          sheetId={sheetId}
+          item={editing?.item ?? null}
+          onSaved={(message) => {
+            setEditing(null)
+            setSaved(message)
+          }}
+        />
+      </Modal>
     </div>
   )
 }
