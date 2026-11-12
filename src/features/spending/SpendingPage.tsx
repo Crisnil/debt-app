@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { accountLabel } from '../../domain/accounts'
 import { todayIso } from '../../domain/dues'
+import { plannedLiving } from '../../domain/payoff'
 import { spendingItems, type SpendingItem } from '../../domain/reconcile'
 import { categoryOf, filterSpending, paidFromOptions, spendingByCategory, spendingMonths, type CategorySpending } from '../../domain/spending'
 import type { IsoDate, Workbook } from '../../domain/types'
@@ -99,6 +100,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
   const shown = filterSpending(forMethod, { month, methodId, category })
   const rows = spendingByCategory(workbook, forMethod)
   const total = forMethod.reduce((s, i) => s + i.amount, 0)
+  const plan = plannedLiving(workbook, month)
   // Keep a chosen filter in its list after the month changes, so the select shows what is filtered.
   const methods = paidFromOptions(workbook, inMonth)
   if (methodId && !methods.some((o) => o.value === methodId)) methods.push({ value: methodId, label: accountLabel(workbook, methodId) })
@@ -141,6 +143,12 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
           </Field>
         </div>
         <p className="mt-3 text-3xl font-semibold text-slate-900">{formatPeso(total)}</p>
+        {plan !== null && plan > 0 && !methodId && (
+          <p className={`text-sm ${total > plan ? 'text-red-800' : 'text-slate-700'}`}>
+            {Math.round((total / plan) * 100)}% of the Plan ({formatPeso(plan)} for the month)
+            {total > plan ? ` · ${formatPeso(total - plan)} over` : ` · ${formatPeso(plan - total)} left`}
+          </p>
+        )}
         <p className="text-xs text-slate-500">
           Spent in {monthLabel(month)}
           {methodId && ` from ${accountLabel(workbook, methodId)}`} · {forMethod.length} {forMethod.length === 1 ? 'purchase' : 'purchases'}. Installments and

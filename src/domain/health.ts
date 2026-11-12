@@ -3,6 +3,7 @@ import { savedInMonth, savingsGoal } from './balances'
 import type { CardForecast } from './forecast'
 import { monthlyIncome } from './forecast'
 import { addMonths } from './payables'
+import { linkedPayable, plannedLineDone, plannedLineIn, plannedLiving } from './payoff'
 import { spendingItems } from './reconcile'
 import { WEEKS_PER_MONTH } from './spending'
 import type { IsoDate, Workbook } from './types'
@@ -48,14 +49,38 @@ export type SpendingGauge = {
   spent: Centavos
   /** What the budget allows for the days so far this month. */
   pace: Centavos
-  /** budget: weekly budgets from the Categories tab. income: no budgets set, so the monthly income is used. */
-  basis: 'budget' | 'income' | 'none'
+  /** The budget for the whole month. */
+  monthly: Centavos
+  /**
+   * plan: the Planned monthly expenses (Plan page). budget: no plan, so the weekly budgets from the Categories tab.
+   * income: no plan and no budgets, so the monthly income is used.
+   */
+  basis: 'plan' | 'budget' | 'income' | 'none'
   ratio: number | null
   /** Spent last month up to the same day. */
   lastMonth: Centavos
 }
 
-/** Spending this month (each purchase once) against the budget for the days so far. */
+/**
+ * The Plan for the days so far: a line from a bill counts in full once its due day has passed;
+ * other lines are spread evenly over the month. null when the Plan has no amount this month.
+ */
+export function planPace(wb: Workbook, month: string, day: number): { monthly: Centavos; pace: Centavos } | null {
+  const monthly = plannedLiving(wb, month)
+  if (!monthly) return null
+  const daysInMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
+  let pace = 0
+  for (const line of wb.plannedExpenses) {
+    if (!plannedLineIn(wb, line, month) || plannedLineDone(wb, line, month)) continue
+    const bill = linkedPayable(wb, line)
+    if (bill) {
+      if (day >= Math.min(bill.dueDay ?? daysInMonth, daysInMonth)) pace += line.amount
+    } else pace += Math.round((line.amount * day) / daysInMonth)
+  }
+  return { monthly, pace }
+}
+
+/** Spending this month (each purchase once) against the Plan (or budget) for the days so far. */
 export function spendingGauge(wb: Workbook, today: IsoDate): SpendingGauge {
   const month = today.slice(0, 7)
   const day = Number(today.slice(8, 10))
@@ -63,10 +88,13 @@ export function spendingGauge(wb: Workbook, today: IsoDate): SpendingGauge {
   const items = spendingItems(wb)
   const spentIn = (m: string, upToDay: number) =>
     items.filter((i) => i.date.startsWith(m) && Number(i.date.slice(8, 10)) <= upToDay).reduce((s, i) => s + i.amount, 0)
+  const spent = spentIn(month, day)
+  const lastMonth = spentIn(addMonths(month, -1), day)
+  const plan = planPace(wb, month, day)
+  if (plan) return { spent, ...plan, basis: 'plan', ratio: plan.pace > 0 ? spent / plan.pace : null, lastMonth }
   const weekly = wb.categories.reduce((s, c) => s + c.weeklyBudget, 0)
   const monthly = weekly > 0 ? Math.round(weekly * WEEKS_PER_MONTH) : monthlyIncome(wb)
   const basis = weekly > 0 ? 'budget' : monthly > 0 ? 'income' : 'none'
   const pace = Math.round((monthly * day) / daysInMonth)
-  const spent = spentIn(month, day)
-  return { spent, pace, basis, ratio: pace > 0 ? spent / pace : null, lastMonth: spentIn(addMonths(month, -1), day) }
+  return { spent, pace, monthly, basis, ratio: pace > 0 ? spent / pace : null, lastMonth }
 }

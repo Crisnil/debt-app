@@ -238,7 +238,7 @@ function ThisMonthRow({ workbook, forecasts, today }: { workbook: Workbook; fore
           {spendingH && <Badge health={spendingH} word={SPENDING_WORD[spendingH]} />}
           {spending.ratio !== null && (
             <p className="mt-0.5 text-xs text-slate-500">
-              {Math.round(spending.ratio * 100)}% of {spending.basis === 'budget' ? 'budget' : 'income'} so far
+              {Math.round(spending.ratio * 100)}% of {spending.basis === 'plan' ? 'plan' : spending.basis === 'budget' ? 'budget' : 'income'} so far
             </p>
           )}
         </Metric>
