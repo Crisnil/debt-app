@@ -81,7 +81,7 @@ function PurchaseList({ workbook, items, onOpen }: { workbook: Workbook; items: 
           <button
             type="button"
             onClick={() => onOpen(i)}
-            aria-label={`${i.label || '(no description)'} ${formatPeso(i.amount)}: edit or correct`}
+            aria-label={`${i.label || '(no description)'} ${formatPeso(i.amount)}: correct or void`}
             className="-mx-2 flex w-[calc(100%+1rem)] items-baseline justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
           >
             <span className="min-w-0">
@@ -99,7 +99,7 @@ function PurchaseList({ workbook, items, onOpen }: { workbook: Workbook; items: 
 }
 
 /** Every purchase once (card statements + entries), with filters and budget vs actual per category. */
-export function SpendingView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: IsoDate }) {
+export function SpendingView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
   const all = spendingItems(workbook)
   const [open, setOpen] = useState<SpendingItem | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -177,7 +177,7 @@ export function SpendingView({ sheetId, workbook, today }: { sheetId: string; wo
               </button>
             )}
           </h2>
-          <p className="mb-2 text-xs text-slate-500">Tap a purchase to edit, delete, or correct it.</p>
+          <p className="mb-2 text-xs text-slate-500">Tap a purchase to correct or void it.</p>
           <SuccessNote message={saved} />
           <PurchaseList
             workbook={workbook}
@@ -193,7 +193,6 @@ export function SpendingView({ sheetId, workbook, today }: { sheetId: string; wo
         {open && (
           <ItemDialogBody
             key={`${open.date}-${open.label}-${open.amount}`}
-            sheetId={sheetId}
             workbook={workbook}
             item={open}
             onSaved={(message) => {
@@ -208,5 +207,5 @@ export function SpendingView({ sheetId, workbook, today }: { sheetId: string; wo
 }
 
 export function SpendingPage() {
-  return <WithWorkbook title="Spending">{(sheetId, workbook) => <SpendingView sheetId={sheetId} workbook={workbook} today={todayIso()} />}</WithWorkbook>
+  return <WithWorkbook title="Spending">{(_sheetId, workbook) => <SpendingView workbook={workbook} today={todayIso()} />}</WithWorkbook>
 }

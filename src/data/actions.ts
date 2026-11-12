@@ -251,13 +251,9 @@ async function checkRow(sheetId: string, tab: string, idColumn: string, row: num
   if (index < 0 || String(values[row - 1]?.[index] ?? '').trim() !== id) throw new Error('The sheet changed. Reload the page and try again.')
 }
 
-function needColumn(wb: Workbook, tab: string, column: string) {
-  if (!(wb.headers[tab] ?? []).includes(column)) throw new Error(`Open Settings → Update sheet first (adds "${column}" to ${tab}).`)
-}
-
 export type ExpenseEdit = Pick<Transaction, 'date' | 'amount' | 'merchant' | 'category' | 'methodId' | 'note'>
 
-/** Changes a logged expense in its row of the Transactions tab. */
+/** Corrects a logged expense in its row of the Transactions tab. */
 export async function saveExpense(sheetId: string, wb: Workbook, txn: Transaction, edit: ExpenseEdit, token: string) {
   await checkRow(sheetId, 'Transactions', 'txn_id', txn.row, txn.txnId, token)
   const h = wb.headers.Transactions
@@ -269,19 +265,55 @@ export async function saveExpense(sheetId: string, wb: Workbook, txn: Transactio
   )
 }
 
-/** Deletes a logged expense: the row stays in the sheet with deleted_at set, and the app ignores it. */
-export async function deleteExpense(sheetId: string, wb: Workbook, txn: Transaction, token: string) {
-  needColumn(wb, 'Transactions', 'deleted_at')
-  await checkRow(sheetId, 'Transactions', 'txn_id', txn.row, txn.txnId, token)
-  await updateCells(sheetId, [{ range: cellRange('Transactions', wb.headers.Transactions, 'deleted_at', txn.row!), values: [[now()]] }], token)
+export const VOID_REASONS = ['Did not happen', 'Entered by mistake'] as const
+export type VoidReason = (typeof VOID_REASONS)[number]
+
+/** voided_at and void_reason cells of one row. The row stays in the sheet; the app ignores it. */
+function voidCells(wb: Workbook, tab: string, row: number, reason: VoidReason) {
+  const h = wb.headers[tab] ?? []
+  if (!h.includes('voided_at') || !h.includes('void_reason')) throw new Error(`Open Settings → Update sheet first (adds "voided_at" and "void_reason" to ${tab}).`)
+  return [
+    { range: cellRange(tab, h, 'voided_at', row), values: [[now()]] },
+    { range: cellRange(tab, h, 'void_reason', row), values: [[reason]] },
+  ]
 }
 
-/** Changes the category of a card statement line. The bank's description and amount stay. */
-export async function saveLineCategory(sheetId: string, wb: Workbook, line: StatementLine, category: string, token: string) {
+/** Voids a logged expense that did not happen or was entered by mistake. */
+export async function voidExpense(sheetId: string, wb: Workbook, txn: Transaction, reason: VoidReason, token: string) {
+  const cells = voidCells(wb, 'Transactions', txn.row ?? 0, reason)
+  await checkRow(sheetId, 'Transactions', 'txn_id', txn.row, txn.txnId, token)
+  await updateCells(sheetId, cells, token)
+}
+
+/** The card tab of a statement line, after checking the row still holds this line (statement tabs have no ID column). */
+async function lineTab(sheetId: string, wb: Workbook, line: StatementLine, token: string): Promise<{ tab: string; headers: string[] }> {
   const card = wb.cards.find((c) => c.cardId === line.cardId)
   const headers = card ? wb.headers[card.sheetTab] : undefined
-  if (!card || !headers || line.row === 0) throw new Error('This line is not in the sheet yet. Wait until it is saved, then try again.')
-  await updateCells(sheetId, [{ range: cellRange(card.sheetTab, headers, 'category', line.row), values: [[safeText(category)]] }], token)
+  if (!card || !headers || !line.row) throw new Error('This line is not in the sheet yet. Wait until it is saved, then try again.')
+  const values = (await getTabValues(sheetId, [card.sheetTab], token))[card.sheetTab] ?? []
+  const keys = (values[0] ?? []).map((h) => String(h).trim())
+  const cell = (column: string) => values[line.row - 1]?.[keys.indexOf(column)]
+  if (String(cell('description') ?? '').trim() !== line.description || Math.round(Number(cell('amount')) * 100) !== line.amount) {
+    throw new Error('The sheet changed. Reload the page and try again.')
+  }
+  return { tab: card.sheetTab, headers }
+}
+
+export type LineEdit = Pick<StatementLine, 'amount' | 'description' | 'category'>
+
+/** Corrects a card statement line that was pasted or read wrong. */
+export async function saveLine(sheetId: string, wb: Workbook, line: StatementLine, edit: LineEdit, token: string) {
+  const { tab, headers } = await lineTab(sheetId, wb, line, token)
+  const cell = (column: string, value: CellValue) => ({ range: cellRange(tab, headers, column, line.row), values: [[value]] })
+  await updateCells(sheetId, [cell('amount', pesos(edit.amount)), cell('description', safeText(edit.description)), cell('category', safeText(edit.category))], token)
+}
+
+/** Voids a statement line that was pasted twice or is not on the bank statement. */
+export async function voidLine(sheetId: string, wb: Workbook, line: StatementLine, reason: VoidReason, token: string) {
+  const card = wb.cards.find((c) => c.cardId === line.cardId)
+  const cells = voidCells(wb, card?.sheetTab ?? '', line.row, reason)
+  await lineTab(sheetId, wb, line, token)
+  await updateCells(sheetId, cells, token)
 }
 
 /** Counts (or stops counting) the difference of a balance check as Not recorded spending. */
@@ -290,11 +322,11 @@ export async function saveCheckCount(sheetId: string, wb: Workbook, check: Balan
   await updateCells(sheetId, [{ range: cellRange('BalanceChecks', wb.headers.BalanceChecks, 'count_difference', check.row!), values: [[countDifference]] }], token)
 }
 
-/** Deletes a balance check: the row stays with deleted_at set. The balance goes back to the check before it. */
-export async function deleteBalanceCheck(sheetId: string, wb: Workbook, check: BalanceCheck, token: string) {
-  needColumn(wb, 'BalanceChecks', 'deleted_at')
+/** Voids a balance check. The balance goes back to the check before it. */
+export async function voidBalanceCheck(sheetId: string, wb: Workbook, check: BalanceCheck, reason: VoidReason, token: string) {
+  const cells = voidCells(wb, 'BalanceChecks', check.row ?? 0, reason)
   await checkRow(sheetId, 'BalanceChecks', 'check_id', check.row, check.checkId, token)
-  await updateCells(sheetId, [{ range: cellRange('BalanceChecks', wb.headers.BalanceChecks, 'deleted_at', check.row!), values: [[now()]] }], token)
+  await updateCells(sheetId, cells, token)
 }
 
 /** Changes a payable in place (its row in the Payables tab). */

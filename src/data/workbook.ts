@@ -59,7 +59,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     statementProblems.push(...checkHeaders(card.sheetTab, tab[0], STATEMENT_TAB_HEADERS))
     for (const r of rowsToObjects(tab)) {
       const type = text(r.type).toLowerCase() as LineType
-      if (!LINE_TYPES.has(type)) continue
+      // A voided line (pasted twice, or read wrong) stays in the sheet; the app ignores it.
+      if (!LINE_TYPES.has(type) || text(r.voided_at)) continue
       lines.push({
         cardId: card.cardId,
         row: r.__row,
@@ -116,8 +117,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     .filter((r) => text(r.item_id) && text(r.name))
     .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), payableId: text(r.payable_id), row: r.__row }))
   const balanceChecks = optional('BalanceChecks')
-    // A deleted check stays in the sheet with deleted_at set; the app ignores it.
-    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date) && !text(r.deleted_at))
+    // A voided check stays in the sheet with voided_at set; the app ignores it.
+    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date) && !text(r.voided_at))
     .map((r) => ({
       checkId: text(r.check_id),
       createdAt: text(r.created_at),
@@ -172,8 +173,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         }
       }),
     transactions: rowsToObjects(values.Transactions)
-      // A deleted expense stays in the sheet with deleted_at set; the app ignores it.
-      .filter((r) => isoDate(r.date) && !text(r.deleted_at))
+      // A voided expense (did not happen, or entered by mistake) stays in the sheet; the app ignores it.
+      .filter((r) => isoDate(r.date) && !text(r.voided_at))
       .map((r) => ({
         txnId: text(r.txn_id),
         date: isoDate(r.date),

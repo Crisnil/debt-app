@@ -119,10 +119,11 @@ describe('sheet updates', () => {
       { tab: 'Payables', create: true, columns: expect.arrayContaining(['payable_id', 'times']) },
       { tab: 'PayableAmounts', create: true, columns: ['entry_id', 'payable_id', 'month', 'amount', 'created_at'] },
       { tab: 'PlannedExpenses', create: true, columns: ['item_id', 'name', 'amount', 'active', 'note', 'payable_id'] },
-      { tab: 'BalanceChecks', create: true, columns: ['check_id', 'created_at', 'date', 'account_id', 'balance', 'count_difference', 'note', 'deleted_at'] },
+      { tab: 'BalanceChecks', create: true, columns: ['check_id', 'created_at', 'date', 'account_id', 'balance', 'count_difference', 'note', 'voided_at', 'void_reason'] },
       { tab: 'Accounts', create: false, columns: ['maintaining_balance'] },
-      { tab: 'Transactions', create: false, columns: ['payable_id', 'payable_month', 'deleted_at'] },
-      { tab: 'CC Beta', create: false, columns: ['txn_id'] },
+      { tab: 'Transactions', create: false, columns: ['payable_id', 'payable_month', 'voided_at', 'void_reason'] },
+      { tab: 'CC Alpha', create: false, columns: ['voided_at', 'void_reason'] },
+      { tab: 'CC Beta', create: false, columns: ['txn_id', 'voided_at', 'void_reason'] },
     ])
   })
 
@@ -133,7 +134,7 @@ describe('sheet updates', () => {
 
   it('writes header cells from column A for a new tab and after the last header for an existing tab', () => {
     const cells = sheetUpdateCells(base.headers, base.updates)
-    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:L1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:F1", "'BalanceChecks'!A1:H1", "'Accounts'!I1:I1", "'Transactions'!J1:L1", "'CC Beta'!K1:K1"])
+    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:L1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:F1", "'BalanceChecks'!A1:I1", "'Accounts'!I1:I1", "'Transactions'!J1:M1", "'CC Alpha'!L1:M1", "'CC Beta'!K1:M1"])
   })
 
   it('reads payables once the tabs exist', () => {
@@ -147,6 +148,6 @@ describe('sheet updates', () => {
     })
     expect(wb.payables[0]).toMatchObject({ payableId: 'p1', amount: 200000, recurring: true, dueDay: 15, startMonth: '2030-01', times: 5, active: true, row: 2 })
     expect(wb.payableAmounts).toEqual([{ payableId: 'p1', month: '2030-02', amount: 250000, createdAt: '' }])
-    expect(wb.updates.map((u) => u.tab)).toEqual(['PlannedExpenses', 'BalanceChecks', 'Accounts', 'Transactions', 'CC Beta'])
+    expect(wb.updates.map((u) => u.tab)).toEqual(['PlannedExpenses', 'BalanceChecks', 'Accounts', 'Transactions', 'CC Alpha', 'CC Beta'])
   })
 })

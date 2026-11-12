@@ -3,8 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { deleteExpense, saveCheckCount, saveExpense, saveLineCategory } from '../../data/actions'
-import { readOutbox } from '../../data/outbox'
+import { saveCheckCount, saveExpense, saveLine, voidBalanceCheck, voidExpense, voidLine } from '../../data/actions'
 import { parseWorkbook } from '../../data/workbook'
 import type { Workbook } from '../../domain/types'
 import { SessionProvider } from '../../state/session'
@@ -14,10 +13,11 @@ import { SpendingView } from './SpendingPage'
 vi.mock('../../data/actions', async (original) => ({
   ...(await original<typeof import('../../data/actions')>()),
   saveExpense: vi.fn(async () => {}),
-  deleteExpense: vi.fn(async () => {}),
-  saveLineCategory: vi.fn(async () => {}),
+  voidExpense: vi.fn(async () => {}),
+  saveLine: vi.fn(async () => {}),
+  voidLine: vi.fn(async () => {}),
   saveCheckCount: vi.fn(async () => {}),
-  deleteBalanceCheck: vi.fn(async () => {}),
+  voidBalanceCheck: vi.fn(async () => {}),
 }))
 
 vi.mock('../../google/auth', async (original) => ({
@@ -40,7 +40,7 @@ function renderSpending(workbook: Workbook = base) {
     <QueryClientProvider client={client}>
       <SessionProvider>
         <MemoryRouter>
-          <SpendingView sheetId="s" workbook={workbook} today="2030-01-21" />
+          <SpendingView workbook={workbook} today="2030-01-21" />
         </MemoryRouter>
       </SessionProvider>
     </QueryClientProvider>,
@@ -49,92 +49,107 @@ function renderSpending(workbook: Workbook = base) {
 
 const openItem = (name: RegExp) => userEvent.click(screen.getByRole('button', { name }))
 const dialog = () => screen.getByRole('dialog')
+const inDialog = () => within(dialog())
 
-describe('Spending: edit, delete, correct', () => {
+async function voidWith(what: string, reason: 'Did not happen' | 'Entered by mistake') {
+  await userEvent.click(inDialog().getByRole('button', { name: `Void this ${what}` }))
+  const box = inDialog().getByRole('alertdialog', { name: `Void this ${what}` })
+  await userEvent.click(within(box).getByRole('button', { name: reason }))
+  await userEvent.click(within(box).getByRole('button', { name: 'Void' }))
+}
+
+describe('Spending: correct or void', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
   })
 
-  it('edits a logged expense, then closes and says it is saved', async () => {
+  it('corrects the amount, description, and category of a logged expense', async () => {
     renderSpending()
     await openItem(/^Sample Cafe/)
-    const amount = within(dialog()).getByLabelText('Amount (₱)')
+    const amount = inDialog().getByLabelText('Amount (₱)')
     await userEvent.clear(amount)
     await userEvent.type(amount, '175')
-    await userEvent.selectOptions(within(dialog()).getByLabelText('Category'), 'Grocery')
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Saved Sample Cafe.')).toBeInTheDocument()
+    await userEvent.clear(inDialog().getByLabelText('Description'))
+    await userEvent.type(inDialog().getByLabelText('Description'), 'Sample Bakery')
+    await userEvent.selectOptions(inDialog().getByLabelText('Category'), 'Grocery')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(await screen.findByText('Corrected Sample Bakery.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     const txn = base.transactions.find((t) => t.txnId === 't1')
-    expect(saveExpense).toHaveBeenCalledWith('s', base, txn, { date: '2030-01-12', amount: 17500, merchant: 'Sample Cafe', category: 'Grocery', methodId: 'cash', note: '' }, 'tok')
+    expect(saveExpense).toHaveBeenCalledWith('s', base, txn, { date: '2030-01-12', amount: 17500, merchant: 'Sample Bakery', category: 'Grocery', methodId: 'cash', note: '' }, 'tok')
   })
 
-  it('deletes a logged expense after a confirm', async () => {
+  it('voids a logged expense with a reason, after a confirm', async () => {
     renderSpending()
     await openItem(/^Sample Pharmacy/)
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Delete this expense' }))
-    const confirm = within(dialog()).getByRole('alertdialog', { name: 'Delete this expense' })
-    expect(deleteExpense).not.toHaveBeenCalled()
-    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
-    expect(await screen.findByText('Deleted Sample Pharmacy.')).toBeInTheDocument()
-    expect(deleteExpense).toHaveBeenCalledWith('s', base, base.transactions.find((t) => t.txnId === 't3'), 'tok')
+    await voidWith('expense', 'Entered by mistake')
+    expect(await screen.findByText('Voided Sample Pharmacy (entered by mistake).')).toBeInTheDocument()
+    expect(voidExpense).toHaveBeenCalledWith('s', base, base.transactions.find((t) => t.txnId === 't3'), 'Entered by mistake', 'tok')
   })
 
-  it('warns that a new amount can break the match with the statement line', async () => {
+  it('corrects your entry of a matched purchase by default, or the statement line instead', async () => {
     renderSpending()
     await openItem(/^Sample Grocer/)
-    expect(within(dialog()).queryByText(/can break the match/)).not.toBeInTheDocument()
-    await userEvent.type(within(dialog()).getByLabelText('Amount (₱)'), '1')
-    expect(within(dialog()).getByText(/can break the match/)).toBeInTheDocument()
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Delete this expense' }))
-    expect(within(dialog()).getByText('The purchase still counts from the card statement.')).toBeInTheDocument()
+    await userEvent.type(inDialog().getByLabelText('Amount (₱)'), '1')
+    expect(inDialog().getByText(/can break the match/)).toBeInTheDocument()
+    await userEvent.click(inDialog().getByRole('button', { name: 'Void this expense' }))
+    expect(inDialog().getByText('The purchase still counts from the card statement.')).toBeInTheDocument()
+
+    await userEvent.click(inDialog().getByRole('button', { name: 'Fix the statement line instead' }))
+    expect(inDialog().getByLabelText('Description')).toHaveValue('SAMPLE GROCER')
+    await userEvent.selectOptions(inDialog().getByLabelText('Category'), 'Food')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(await screen.findByText('Corrected SAMPLE GROCER.')).toBeInTheDocument()
+    expect(saveLine).toHaveBeenCalledWith('s', base, expect.objectContaining({ cardId: 'alpha', description: 'SAMPLE GROCER' }), { amount: 250025, description: 'SAMPLE GROCER', category: 'Food' }, 'tok')
   })
 
-  it('changes only the category of a statement line', async () => {
+  it('corrects a statement line that was read wrong', async () => {
     renderSpending()
     await openItem(/^SAMPLE FUEL/)
-    expect(within(dialog()).queryByLabelText('Amount (₱)')).not.toBeInTheDocument()
-    await userEvent.selectOptions(within(dialog()).getByLabelText('Category'), 'Food')
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Save category' }))
-    expect(await screen.findByText('Saved the category of SAMPLE FUEL.')).toBeInTheDocument()
-    expect(saveLineCategory).toHaveBeenCalledWith('s', base, expect.objectContaining({ description: 'SAMPLE FUEL', cardId: 'beta' }), 'Food', 'tok')
+    const amount = inDialog().getByLabelText('Amount (₱)')
+    await userEvent.clear(amount)
+    await userEvent.type(amount, '1,250')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(await screen.findByText('Corrected SAMPLE FUEL.')).toBeInTheDocument()
+    expect(saveLine).toHaveBeenCalledWith('s', base, expect.objectContaining({ cardId: 'beta' }), { amount: 125000, description: 'SAMPLE FUEL', category: 'Gasoline' }, 'tok')
   })
 
-  it('adds a correction as a minus entry with the same category and Paid from', async () => {
+  it('voids a statement line that did not happen', async () => {
     renderSpending()
     await openItem(/^SAMPLE FUEL/)
-    await userEvent.type(within(dialog()).getByLabelText('Take off (₱)'), '2000')
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Add correction' }))
-    expect(within(dialog()).getByText('A correction can take off up to ₱1,200.00.')).toBeInTheDocument()
-    await userEvent.clear(within(dialog()).getByLabelText('Take off (₱)'))
-    await userEvent.type(within(dialog()).getByLabelText('Take off (₱)'), '200')
-    await userEvent.type(within(dialog()).getByLabelText('Note (optional)'), 'refund')
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Add correction' }))
-    expect(screen.getByText('Added a correction of −₱200.00.')).toBeInTheDocument()
-    expect(readOutbox('s').at(-1)?.record).toMatchObject({
-      amount: -200,
-      merchant: 'Correction: SAMPLE FUEL',
-      category: 'Gasoline',
-      method_id: 'beta',
-      note: 'Correction of SAMPLE FUEL (2030-01-01) · refund',
-    })
+    await voidWith('statement line', 'Did not happen')
+    expect(await screen.findByText('Voided SAMPLE FUEL (did not happen).')).toBeInTheDocument()
+    expect(voidLine).toHaveBeenCalledWith('s', base, expect.objectContaining({ description: 'SAMPLE FUEL' }), 'Did not happen', 'tok')
   })
 
-  it('does not edit an entry that is not in the sheet yet', async () => {
+  it('keeps the dialog open with the problem when the amount is wrong', async () => {
+    renderSpending()
+    await openItem(/^Sample Cafe/)
+    await userEvent.clear(inDialog().getByLabelText('Amount (₱)'))
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(inDialog().getByText('Enter an amount more than 0.')).toBeInTheDocument()
+    expect(saveExpense).not.toHaveBeenCalled()
+  })
+
+  it('does not change an entry that is not in the sheet yet', async () => {
     renderSpending({ ...base, transactions: [...base.transactions, { txnId: 'new', date: '2030-01-20', amount: 9900, merchant: 'Waiting Shop', category: 'Food', methodId: 'cash', note: '' }] })
     await openItem(/^Waiting Shop/)
-    expect(within(dialog()).getByText(/not in the sheet yet/)).toBeInTheDocument()
-    expect(within(dialog()).queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(inDialog().getByText(/not in the sheet yet/)).toBeInTheDocument()
+    expect(inDialog().queryByRole('button', { name: 'Save correction' })).not.toBeInTheDocument()
   })
 
-  it('stops counting a Not recorded difference from a balance check', async () => {
+  it('stops counting a Not recorded difference, or voids the balance check', async () => {
     const check = { checkId: 'c1', createdAt: '', date: '2030-01-13', accountId: 'cash', balance: 0, countDifference: true, note: '', row: 2 }
     renderSpending({ ...base, balanceChecks: [check] })
     await openItem(/^Balance check: Cash/)
-    expect(within(dialog()).queryByText('Add a correction')).not.toBeInTheDocument()
-    await userEvent.click(within(dialog()).getByRole('button', { name: "Don't count as spending" }))
+    await userEvent.click(inDialog().getByRole('button', { name: "Don't count as spending" }))
     expect(await screen.findByText('This difference is not counted any more.')).toBeInTheDocument()
     expect(saveCheckCount).toHaveBeenCalledWith('s', expect.anything(), check, false, 'tok')
+
+    await openItem(/^Balance check: Cash/)
+    await voidWith('balance check', 'Entered by mistake')
+    expect(await screen.findByText('Voided the balance check (entered by mistake).')).toBeInTheDocument()
+    expect(voidBalanceCheck).toHaveBeenCalledWith('s', expect.anything(), check, 'Entered by mistake', 'tok')
   })
 })
