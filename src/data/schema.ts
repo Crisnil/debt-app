@@ -30,20 +30,24 @@ export type OptionalTab = keyof typeof OPTIONAL_TABS
 export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
   Cards: ['credit_limit'],
   Accounts: ['maintaining_balance'],
-  Transactions: ['payable_id', 'payable_month'],
+  Transactions: ['payable_id', 'payable_month', 'voided_at', 'void_reason'],
   PlannedExpenses: ['payable_id'],
+  BalanceChecks: ['voided_at', 'void_reason'],
 }
+
+/** Columns the app can add at the end of each card's statement tab: the link to an expense, and void. */
+export const STATEMENT_OPTIONAL_COLUMNS = ['txn_id', 'voided_at', 'void_reason'] as const
 
 /** A tab to add (with its header row) or columns to add at the end of a tab's header row. */
 export type SheetUpdate = { tab: string; create: boolean; columns: string[] }
 
-/** What Update sheet would add: missing optional tabs, optional columns, and txn_id on card statement tabs. */
+/** What Update sheet would add: missing optional tabs, optional columns, and the optional columns of card statement tabs. */
 export function sheetUpdates(availableTabs: readonly string[], headers: Record<string, string[]>, statementTabs: readonly string[]): SheetUpdate[] {
   const updates: SheetUpdate[] = []
   for (const [tab, columns] of Object.entries(OPTIONAL_TABS)) {
     if (!availableTabs.includes(tab)) updates.push({ tab, create: true, columns: [...columns, ...(OPTIONAL_COLUMNS[tab] ?? [])] })
   }
-  const wanted: [string, readonly string[]][] = [...Object.entries(OPTIONAL_COLUMNS), ...statementTabs.map((t): [string, readonly string[]] => [t, ['txn_id']])]
+  const wanted: [string, readonly string[]][] = [...Object.entries(OPTIONAL_COLUMNS), ...statementTabs.map((t): [string, readonly string[]] => [t, STATEMENT_OPTIONAL_COLUMNS])]
   for (const [tab, columns] of wanted) {
     const have = headers[tab]
     if (!have) continue
@@ -53,7 +57,7 @@ export function sheetUpdates(availableTabs: readonly string[], headers: Record<s
   return updates
 }
 
-/** Headers for each card's statement tab (named in Cards.sheet_tab). txn_id is optional. */
+/** Headers for each card's statement tab (named in Cards.sheet_tab). STATEMENT_OPTIONAL_COLUMNS are optional. */
 export const STATEMENT_TAB_HEADERS = [
   'statement_date',
   'post_date',

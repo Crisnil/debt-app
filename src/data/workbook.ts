@@ -59,7 +59,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     statementProblems.push(...checkHeaders(card.sheetTab, tab[0], STATEMENT_TAB_HEADERS))
     for (const r of rowsToObjects(tab)) {
       const type = text(r.type).toLowerCase() as LineType
-      if (!LINE_TYPES.has(type)) continue
+      // A voided line (pasted twice, or read wrong) stays in the sheet; the app ignores it.
+      if (!LINE_TYPES.has(type) || text(r.voided_at)) continue
       lines.push({
         cardId: card.cardId,
         row: r.__row,
@@ -116,7 +117,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     .filter((r) => text(r.item_id) && text(r.name))
     .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), payableId: text(r.payable_id), row: r.__row }))
   const balanceChecks = optional('BalanceChecks')
-    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date))
+    // A voided check stays in the sheet with voided_at set; the app ignores it.
+    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date) && !text(r.voided_at))
     .map((r) => ({
       checkId: text(r.check_id),
       createdAt: text(r.created_at),
@@ -125,6 +127,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
       balance: money(r.balance),
       countDifference: text(r.count_difference) === '' ? true : bool(r.count_difference),
       note: text(r.note),
+      row: r.__row,
     }))
   const updates = sheetUpdates(availableTabs, headers, cards.map((c) => c.sheetTab).filter((t) => t && availableTabs.includes(t)))
 
@@ -170,7 +173,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         }
       }),
     transactions: rowsToObjects(values.Transactions)
-      .filter((r) => isoDate(r.date))
+      // A voided expense (did not happen, or entered by mistake) stays in the sheet; the app ignores it.
+      .filter((r) => isoDate(r.date) && !text(r.voided_at))
       .map((r) => ({
         txnId: text(r.txn_id),
         date: isoDate(r.date),
@@ -181,6 +185,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         note: text(r.note),
         payableId: text(r.payable_id),
         payableMonth: yearMonth(r.payable_month),
+        row: r.__row,
       })),
     transfers: rowsToObjects(values.Transfers)
       .filter((r) => isoDate(r.date) && text(r.from_account) && text(r.to_account))
