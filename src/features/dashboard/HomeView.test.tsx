@@ -49,6 +49,16 @@ describe('Home', () => {
     expect(readOutbox('s').at(-1)?.record).toMatchObject({ date: '2030-01-28', source_id: 'salary', type: 'salary', amount: 20000, to_account: 'payroll' })
   })
 
+  it('reminds to check the balances of accounts not checked this month', () => {
+    const wb = parseWorkbook('Sample', [...fixtureTabs, 'BalanceChecks'], {
+      ...fixtureValues,
+      BalanceChecks: [['check_id', 'created_at', 'date', 'account_id', 'balance', 'count_difference', 'note'], ['c1', '', '2030-01-13', 'cash', 0, true, '']],
+    })
+    renderHome(wb)
+    expect(screen.getByText(/Not checked this month/)).toHaveTextContent('Not checked this month: Payroll, Piggy Bank · Check now')
+    expect(screen.getByRole('link', { name: 'Check now' })).toHaveAttribute('href', '/balances')
+  })
+
   it('shows what we have, with savings and spendable now', () => {
     renderHome()
     expect(screen.getByRole('heading', { name: 'What we have' })).toBeInTheDocument()

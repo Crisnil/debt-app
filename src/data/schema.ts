@@ -21,6 +21,7 @@ export const OPTIONAL_TABS = {
   Payables: ['payable_id', 'created_at', 'name', 'payee', 'category', 'amount', 'recurring', 'due_day', 'start_month', 'times', 'active', 'note'],
   PayableAmounts: ['entry_id', 'payable_id', 'month', 'amount', 'created_at'],
   PlannedExpenses: ['item_id', 'name', 'amount', 'active', 'note'],
+  BalanceChecks: ['check_id', 'created_at', 'date', 'account_id', 'balance', 'count_difference', 'note'],
 } as const
 
 export type OptionalTab = keyof typeof OPTIONAL_TABS

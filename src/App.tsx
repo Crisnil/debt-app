@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { AddPage } from './features/add/AddPage'
+import { BalancesPage } from './features/balances/BalancesPage'
 import { OtherEntriesPage } from './features/add/OtherEntriesPage'
 import { CardPage } from './features/cards/CardPage'
 import { CardsPage } from './features/cards/CardsPage'
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/spending" element={<SpendingPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/balances" element={<BalancesPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

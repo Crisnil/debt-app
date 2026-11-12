@@ -116,6 +116,13 @@ export type PlannedExpense = {
 /** The real amount of a recurring payable for one month, when it differs from the usual amount. */
 export type PayableAmount = { payableId: string; month: string; amount: Centavos; createdAt: string }
 
+/**
+ * The real balance of a money account at the end of a day, typed from the bank app or counted.
+ * The app balance starts again from here. countDifference: a balance lower than expected is
+ * "Not recorded" spending. false = a new starting balance (for example the first check).
+ */
+export type BalanceCheck = { checkId: string; createdAt: string; date: IsoDate; accountId: string; balance: Centavos; countDifference: boolean; note: string }
+
 /** Money moved between two accounts. Not spending. */
 export type Transfer = { transferId: string; date: IsoDate; fromAccount: string; toAccount: string; amount: Centavos; note: string }
 
@@ -167,6 +174,7 @@ export type Workbook = {
   payables: Payable[]
   payableAmounts: PayableAmount[]
   plannedExpenses: PlannedExpense[]
+  balanceChecks: BalanceCheck[]
   /** Tabs and columns the sheet does not have yet (Settings → Update sheet). */
   updates: SheetUpdate[]
 }

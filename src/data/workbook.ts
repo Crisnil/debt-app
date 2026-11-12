@@ -115,6 +115,17 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
   const plannedExpenses = optional('PlannedExpenses')
     .filter((r) => text(r.item_id) && text(r.name))
     .map((r) => ({ itemId: text(r.item_id), name: text(r.name), amount: money(r.amount), active: text(r.active) === '' ? true : bool(r.active), payableId: text(r.payable_id), row: r.__row }))
+  const balanceChecks = optional('BalanceChecks')
+    .filter((r) => text(r.check_id) && text(r.account_id) && isoDate(r.date))
+    .map((r) => ({
+      checkId: text(r.check_id),
+      createdAt: text(r.created_at),
+      date: isoDate(r.date),
+      accountId: text(r.account_id),
+      balance: money(r.balance),
+      countDifference: text(r.count_difference) === '' ? true : bool(r.count_difference),
+      note: text(r.note),
+    }))
   const updates = sheetUpdates(availableTabs, headers, cards.map((c) => c.sheetTab).filter((t) => t && availableTabs.includes(t)))
 
   return {
@@ -123,6 +134,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     payables,
     payableAmounts,
     plannedExpenses,
+    balanceChecks,
     updates,
     settings,
     cards,

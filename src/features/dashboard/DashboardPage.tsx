@@ -324,7 +324,7 @@ export function HomeView({ sheetId, workbook, today }: { sheetId: string; workbo
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
         <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
-        <WhatWeHave workbook={workbook} />
+        <WhatWeHave workbook={workbook} today={today} />
       </div>
       <Tiles workbook={workbook} forecasts={forecasts} today={today} />
       <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
