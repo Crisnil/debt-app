@@ -53,19 +53,28 @@ export function useSheetEdit() {
   const [done, setDone] = useState<string | null>(null)
 
   const run = useCallback(
-    async (message: string, edit: (sheetId: string, workbook: Workbook, token: string) => Promise<void>) => {
+    /** Resolves true when the edit is saved. */
+    async (message: string, edit: (sheetId: string, workbook: Workbook, token: string) => Promise<void>): Promise<boolean> => {
       const token = currentToken()
       setDone(null)
-      if (!sheet || !data || !token) return setError('Sign in and select your sheet first.')
-      if (!navigator.onLine) return setError('You are offline. Settings need an internet connection.')
+      if (!sheet || !data || !token) {
+        setError('Sign in and select your sheet first.')
+        return false
+      }
+      if (!navigator.onLine) {
+        setError('You are offline. Settings need an internet connection.')
+        return false
+      }
       setBusy(true)
       setError(null)
       try {
         await edit(sheet.id, data, token)
         await queryClient.invalidateQueries({ queryKey: ['workbook', sheet.id] })
         setDone(message)
+        return true
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
+        return false
       } finally {
         setBusy(false)
       }
