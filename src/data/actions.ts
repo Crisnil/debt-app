@@ -161,6 +161,7 @@ export function addPayable(sheetId: string, input: PayableInput): Payable {
       times: value.times ?? '',
       active: true,
       note: value.note,
+      card_id: value.cardId,
     },
     entity: { kind: 'payable', value },
   })
@@ -237,7 +238,7 @@ export async function stopPayable(sheetId: string, wb: Workbook, row: number, to
   )
 }
 
-export type PayableEdit = Pick<Payable, 'name' | 'payee' | 'category' | 'amount' | 'dueDay' | 'times'>
+export type PayableEdit = Pick<Payable, 'name' | 'payee' | 'category' | 'amount' | 'dueDay' | 'times' | 'cardId'>
 
 // ---- spending corrections (online only) -------------------------------------
 
@@ -397,6 +398,7 @@ export async function savePayable(sheetId: string, wb: Workbook, row: number, ed
       cell('amount', pesos(edit.amount)),
       cell('due_day', edit.dueDay ?? ''),
       cell('times', edit.times ?? ''),
+      ...(h.includes('card_id') ? [cell('card_id', edit.cardId)] : []),
     ],
     token,
   )

@@ -108,6 +108,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
       times: int(r.times),
       active: text(r.active) === '' ? true : bool(r.active),
       note: text(r.note),
+      cardId: text(r.card_id),
       row: r.__row,
     }))
   const payableAmounts = optional('PayableAmounts')

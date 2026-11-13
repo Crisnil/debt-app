@@ -4,9 +4,9 @@ import { sheetUpdates } from '../data/schema'
 import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { billsByMonth, forecastCards, PAYABLES, withPayables } from './forecast'
-import { dueDateIn, payableMonths, payableProgress, payablesByMonth, payablesOwed } from './payables'
+import { cardCharges, dueDateIn, payableMonths, payableProgress, payablesByMonth, payablesOwed } from './payables'
 import { spendingItems } from './reconcile'
-import type { Payable, Transaction, Workbook } from './types'
+import type { Payable, StatementLine, Transaction, Workbook } from './types'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
@@ -22,6 +22,7 @@ const payable = (over: Partial<Payable>): Payable => ({
   times: null,
   active: true,
   note: '',
+  cardId: '',
   row: 2,
   ...over,
 })
@@ -136,7 +137,7 @@ describe('sheet updates', () => {
 
   it('writes header cells from column A for a new tab and after the last header for an existing tab', () => {
     const cells = sheetUpdateCells(base.headers, base.updates)
-    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:L1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:F1", "'BalanceChecks'!A1:I1", "'Accounts'!I1:J1", "'Transactions'!J1:M1", "'Transfers'!H1:I1", "'IncomeLog'!I1:J1", "'Payments'!I1:J1", "'CC Alpha'!L1:M1", "'CC Beta'!K1:M1"])
+    expect(cells.map((c) => c.range)).toEqual(["'Payables'!A1:M1", "'PayableAmounts'!A1:E1", "'PlannedExpenses'!A1:F1", "'BalanceChecks'!A1:I1", "'Accounts'!I1:J1", "'Transactions'!J1:M1", "'Transfers'!H1:I1", "'IncomeLog'!I1:J1", "'Payments'!I1:J1", "'CC Alpha'!L1:M1", "'CC Beta'!K1:M1"])
   })
 
   it('reads payables once the tabs exist', () => {
@@ -150,6 +151,34 @@ describe('sheet updates', () => {
     })
     expect(wb.payables[0]).toMatchObject({ payableId: 'p1', amount: 200000, recurring: true, dueDay: 15, startMonth: '2030-01', times: 5, active: true, row: 2 })
     expect(wb.payableAmounts).toEqual([{ payableId: 'p1', month: '2030-02', amount: 250000, createdAt: '' }])
-    expect(wb.updates.map((u) => u.tab)).toEqual(['PlannedExpenses', 'BalanceChecks', 'Accounts', 'Transactions', 'Transfers', 'IncomeLog', 'Payments', 'CC Alpha', 'CC Beta'])
+    // card_id (bills charged to a card) is added to an existing Payables tab.
+    expect(wb.updates.map((u) => u.tab)).toEqual(['PlannedExpenses', 'BalanceChecks', 'Accounts', 'Transactions', 'Transfers', 'IncomeLog', 'Payments', 'Payables', 'CC Alpha', 'CC Beta'])
   })
 })
+
+describe('bills charged to a card', () => {
+  const netflix = payable({ payableId: 'nf', name: 'Netflix', payee: 'NETFLIX', amount: 54900, cardId: 'alpha', dueDay: 5 })
+  const wb: Workbook = { ...base, payables: [payable({}), netflix] }
+
+  it('are not counted as owed, due, or in the monthly bills: the card bill has them', () => {
+    const without: Workbook = { ...base, payables: [payable({})] }
+    expect(payableMonths(wb, '2030-03').map((m) => m.payable.payableId)).not.toContain('nf')
+    expect(payablesOwed(wb, '2030-01-21')).toBe(payablesOwed(without, '2030-01-21'))
+    expect(withPayables(billsByMonth(forecastCards(wb, '2030-01-21'), '2030-01-21'), wb)[0].total).toBe(
+      withPayables(billsByMonth(forecastCards(without, '2030-01-21'), '2030-01-21'), without)[0].total,
+    )
+  })
+
+  it('finds the charge of the month on that card only, not payments', () => {
+    const line = (cardId: string, txnDate: string, description: string, type: StatementLine['type'] = 'straight'): StatementLine => ({
+      cardId, row: 9, statementDate: '2030-01-10', postDate: txnDate, txnDate, description, type, amount: type === 'payment' ? -54900 : 54900, termNo: null, totalTerms: null, category: '', linkedTxnId: '',
+    })
+    const lines = [line('beta', '2030-01-05', 'NETFLIX'), line('alpha', '2030-01-06', 'NETFLIX REFUND', 'payment'), line('alpha', '2029-12-05', 'Netflix.com')]
+    const [c] = cardCharges({ ...wb, lines }, '2030-01-21')
+    expect(c.charged).toBeNull()
+    expect(c.last?.txnDate).toBe('2029-12-05')
+    const [found] = cardCharges({ ...wb, lines: [...lines, line('alpha', '2030-01-05', 'NETFLIX.COM')] }, '2030-01-21')
+    expect(found.charged?.txnDate).toBe('2030-01-05')
+  })
+})
+

@@ -18,7 +18,7 @@ describe('home summary', () => {
   it('adds payables as their own part', () => {
     const wb: Workbook = {
       ...base,
-      payables: [{ payableId: 'p', name: 'Sample loan', payee: '', category: 'Debt repayment', amount: 200000, recurring: true, dueDay: 15, startMonth: '2030-01', times: 2, active: true, note: '', row: 2 }],
+      payables: [{ payableId: 'p', name: 'Sample loan', payee: '', category: 'Debt repayment', amount: 200000, recurring: true, dueDay: 15, startMonth: '2030-01', times: 2, active: true, note: '', cardId: '', row: 2 }],
     }
     expect(owedParts(wb, forecastCards(wb, TODAY), TODAY).at(-1)).toEqual({ id: 'payables', name: 'Bills & payables', amount: 400000, to: '/bills' })
   })

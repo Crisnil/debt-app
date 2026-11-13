@@ -35,6 +35,7 @@ export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
   IncomeLog: ['voided_at', 'void_reason'],
   Payments: ['created_at', 'voided_at', 'void_reason'],
   PlannedExpenses: ['payable_id'],
+  Payables: ['card_id'],
   BalanceChecks: ['voided_at', 'void_reason'],
 }
 

@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { parseWorkbook } from '../../data/workbook'
+import { readOutbox } from '../../data/outbox'
 import { billsThisMonth, monthsToKeep } from '../../domain/payables'
+import { formatPeso } from '../../lib/money'
 import type { Payable, Transaction, Workbook } from '../../domain/types'
 import { SessionProvider } from '../../state/session'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
@@ -24,6 +26,7 @@ const payable = (over: Partial<Payable>): Payable => ({
   times: null,
   active: true,
   note: '',
+  cardId: '',
   row: 2,
   ...over,
 })
@@ -158,4 +161,65 @@ describe('Bills table', () => {
       { month: '2030-02', amount: 100000 },
     ])
   })
+
+  describe('subscriptions charged to a card', () => {
+    const line = (txnDate: string, description: string, amount: number) => ({
+      cardId: 'alpha',
+      row: 9,
+      statementDate: '2030-03-10',
+      postDate: txnDate,
+      txnDate,
+      description,
+      type: 'straight' as const,
+      amount,
+      termNo: null,
+      totalTerms: null,
+      category: '',
+      linkedTxnId: '',
+    })
+    const withCard = (extra: Partial<Workbook> = {}): Workbook => ({
+      ...wb,
+      headers: { ...wb.headers, Payables: [...(wb.headers.Payables ?? []), 'card_id'] },
+      payables: [...wb.payables, payable({ payableId: 'nf', name: 'Netflix', payee: 'NETFLIX', amount: 54900, cardId: 'alpha', dueDay: 5, row: 9 })],
+      ...extra,
+    })
+
+    it('lists them apart, not in Left to pay, and finds the charge on the statement', () => {
+      const lines = [...base.lines, line('2030-02-05', 'NETFLIX.COM 866', 54900), line('2030-03-05', 'NETFLIX.COM 866', 54900)]
+      renderBills('2030-03-15', withCard({ lines }))
+      expect(screen.getByText(/Left to pay this month/)).toHaveTextContent(formatPesoText(billsThisMonth(wb, '2030-03-15')))
+      expect(screen.queryByRole('button', { name: 'Pay Netflix' })).not.toBeInTheDocument()
+      const section = screen.getByRole('heading', { name: 'Subscriptions on cards' }).parentElement!
+      expect(section).toHaveTextContent('Netflix')
+      expect(section).toHaveTextContent('Alpha · ₱549.00/mo')
+      expect(section).toHaveTextContent('✓ On the statement · Mar 5 · ₱549.00')
+    })
+
+    it('says when this month is not on a statement yet, with the last charge', () => {
+      renderBills('2030-03-15', withCard({ lines: [...base.lines, line('2030-02-05', 'NETFLIX.COM', 54900)] }))
+      expect(screen.getByText(/Not on a statement yet/)).toHaveTextContent('Not on a statement yet · last Feb 5, ₱549.00')
+    })
+
+    it('adds a bill charged to a card, with the name on the statement', async () => {
+      localStorage.clear()
+      renderBills('2030-03-15', withCard())
+      await userEvent.click(screen.getByRole('button', { name: '+ Add bill' }))
+      const dialog = screen.getByRole('dialog', { name: 'Add bill' })
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Charged to Alpha' }))
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Spotify')
+      await userEvent.type(within(dialog).getByLabelText('Name on the statement'), 'SPOTIFY')
+      await userEvent.type(within(dialog).getByLabelText('Usual amount per month (₱)'), '149')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Add bill' }))
+      expect(readOutbox('s').at(-1)?.record).toMatchObject({ name: 'Spotify', payee: 'SPOTIFY', amount: 149, card_id: 'alpha' })
+    })
+
+    it('does not offer a card before the sheet has the card_id column', async () => {
+      renderBills()
+      await userEvent.click(screen.getByRole('button', { name: '+ Add bill' }))
+      expect(screen.queryByRole('button', { name: 'Charged to Alpha' })).not.toBeInTheDocument()
+    })
+  })
 })
+
+const formatPesoText = (rows: ReturnType<typeof billsThisMonth>) => formatPeso(rows.reduce((s, r) => s + r.left, 0))
+

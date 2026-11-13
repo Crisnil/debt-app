@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addPlannedExpense, savePlannedExpense, stopPayable } from '../../data/actions'
 import { todayIso } from '../../domain/dues'
-import { billsThisMonth, type PayableMonth } from '../../domain/payables'
+import { accountLabel } from '../../domain/accounts'
+import { billsThisMonth, canChargeToCard, cardCharges, dueDateIn, type CardCharge, type PayableMonth } from '../../domain/payables'
 import type { Payable, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { useSheetEdit } from '../../state/hooks'
@@ -167,6 +168,47 @@ function BillRow({ item, today, onOpen }: { item: PayableMonth; today: string; o
   )
 }
 
+/** A subscription as a bill month, to edit it with the same form. Not counted as owed: the card bill has it. */
+const asMonth = (p: Payable, month: string): PayableMonth => ({ payable: p, month, number: 1, dueDate: dueDateIn(month, p.dueDay), amount: p.amount, amountSet: false, paid: 0, left: 0 })
+
+/** Bills charged to a card automatically: whether this month's charge is on the card's statement yet. */
+function CardCharges({ workbook, today, onEdit }: { workbook: Workbook; today: string; onEdit: (item: PayableMonth) => void }) {
+  const charges = cardCharges(workbook, today)
+  if (charges.length === 0) return null
+  const found = (c: CardCharge) =>
+    c.charged ? (
+      <span className="text-green-900">
+        ✓ On the statement · {shortDate(c.charged.txnDate || c.charged.postDate)} · {formatPeso(c.charged.amount)}
+      </span>
+    ) : (
+      <span className="text-slate-600">
+        Not on a statement yet{c.last ? ` · last ${shortDate(c.last.txnDate || c.last.postDate)}, ${formatPeso(c.last.amount)}` : ''}
+      </span>
+    )
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm">
+      <h2 className="font-medium text-slate-900">Subscriptions on cards</h2>
+      <p className="mt-1 text-xs text-slate-500">Charged to a card automatically. You pay them with the card bill, so they are not in Left to pay.</p>
+      <ul className="mt-2 divide-y divide-slate-100 text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {charges.map((c) => (
+          <li key={c.payable.payableId} className="flex items-center justify-between gap-3 py-2">
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900">{c.payable.name}</p>
+              <p className="text-xs text-slate-500">
+                {accountLabel(workbook, c.payable.cardId)} · {formatPeso(c.payable.amount)}/mo
+              </p>
+              <p className="text-xs">{found(c)}</p>
+            </div>
+            <button type="button" className={editButton} aria-label={`Edit ${c.payable.name}`} disabled={c.payable.row === 0} onClick={() => onEdit(asMonth(c.payable, today.slice(0, 7)))}>
+              Edit
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /** This month's bills and money owed outside the cards, in a table. Recurring payables come back each month by themselves. */
 export function BillsView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: string }) {
   const [open, setOpen] = useState<Open>(null)
@@ -215,6 +257,7 @@ export function BillsView({ sheetId, workbook, today }: { sheetId: string; workb
         )}
         <SuccessNote message={saved} />
       </div>
+      <CardCharges workbook={workbook} today={today} onEdit={(item) => show({ kind: 'edit', item })} />
       <p className="text-xs text-slate-500">
         Monthly payables come back by themselves on the 1st of each month. Card bills are on Cards.{' '}
         {canPlan(workbook) ? (
@@ -228,7 +271,10 @@ export function BillsView({ sheetId, workbook, today }: { sheetId: string; workb
       <Modal title={title} open={open !== null} onClose={() => setOpen(null)}>
         {open?.kind === 'add' && (
           <>
-            <p className="mb-3 text-xs text-slate-500">A bill (electric, water, internet) or money you owe a person. Every month or one time.</p>
+            <p className="mb-3 text-xs text-slate-500">
+              A bill (electric, water, internet) or money you owe a person. Every month or one time.
+              {canChargeToCard(workbook) ? ' A subscription charged to a card: choose the card under How it is paid.' : ''}
+            </p>
             <AddPayableForm sheetId={sheetId} workbook={workbook} onSaved={done} />
           </>
         )}
@@ -245,7 +291,8 @@ export function BillsPage() {
   return (
     <WithWorkbook title="Bills">
       {(sheetId, workbook) =>
-        workbook.updates.some((u) => PAYABLE_TABS.includes(u.tab)) ? (
+        // card_id (subscriptions on cards) is optional: Bills works without it.
+        workbook.updates.some((u) => PAYABLE_TABS.includes(u.tab) && u.columns.some((c) => c !== 'card_id')) ? (
           <section className="space-y-4">
             <h1 className="text-2xl font-semibold text-slate-900">Bills</h1>
             <SheetUpdateCard workbook={workbook} why="Bills and money you owe need new tabs in your sheet." />
