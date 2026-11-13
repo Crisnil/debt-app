@@ -6,6 +6,7 @@ import { accountsToCheck } from '../../domain/balances'
 import { moneyParts, moneyTotals } from '../../domain/home'
 import { incomeTypeFor, paydaysToRecord, type Payday } from '../../domain/payday'
 import type { IsoDate, Workbook } from '../../domain/types'
+import type { RefreshState } from '../../state/hooks'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { Donut } from '../../ui/charts/Donut'
@@ -17,7 +18,7 @@ const panel = 'rounded-xl bg-white p-4 shadow-sm'
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
 /** What we have: one part per money account, grouped Debit, E-wallet, Cash, with savings goal and spendable-now totals. */
-export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
+export function WhatWeHave({ workbook, today, refresh }: { workbook: Workbook; today: IsoDate; refresh?: RefreshState }) {
   const parts = moneyParts(workbook)
   if (parts.length === 0) return null
   const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
@@ -38,7 +39,8 @@ export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: Iso
     <div className={panel}>
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="font-medium text-slate-900">What we have</h2>
-        <span className="space-x-3 text-sm">
+        <span className="flex items-center gap-3 text-sm">
+          {refresh && <RefreshButton state={refresh} />}
           <Link to="/balances" className="text-green-900 underline">
             Check balances
           </Link>
@@ -61,9 +63,44 @@ export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: Iso
           </Link>
         </p>
       )}
+      {refresh && <RefreshStatus state={refresh} />}
       <p className="mt-2 text-xs text-slate-500">
         Balances count from each account&apos;s last balance check (or starting balance). Record paydays so they stay right.
       </p>
+    </div>
+  )
+}
+
+const timeOf = (date: Date) => date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+
+/** ↻: sends waiting entries and reloads the sheet. Spins while it works. */
+function RefreshButton({ state }: { state: RefreshState }) {
+  return (
+    <button
+      type="button"
+      aria-label="Refresh balances"
+      title="Refresh balances"
+      disabled={state.busy}
+      onClick={state.refresh}
+      className="-m-1 rounded-full p-1 text-green-900 hover:bg-green-50 disabled:opacity-60"
+    >
+      <svg viewBox="0 0 24 24" className={`h-4 w-4 ${state.busy ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
+      </svg>
+    </button>
+  )
+}
+
+/** What the last refresh did: updated at, entries still waiting, or the problem. */
+function RefreshStatus({ state }: { state: RefreshState }) {
+  const parts = [
+    state.busy ? 'Refreshing…' : state.updatedAt ? `Updated ${timeOf(state.updatedAt)}` : '',
+    state.pending > 0 ? `${state.pending} ${state.pending === 1 ? 'entry' : 'entries'} waiting to send` : '',
+  ].filter(Boolean)
+  return (
+    <div role="status" className="mt-2 text-xs">
+      {parts.length > 0 && <p className="text-slate-600">{parts.join(' · ')}</p>}
+      {state.error && <p className="text-red-800">{state.error}</p>}
     </div>
   )
 }

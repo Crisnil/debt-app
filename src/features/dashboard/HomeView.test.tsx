@@ -1,19 +1,20 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readOutbox } from '../../data/outbox'
 import { parseWorkbook } from '../../data/workbook'
 import type { Workbook } from '../../domain/types'
+import type { RefreshState } from '../../state/hooks'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
 import { HomeView } from './DashboardPage'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
-function renderHome(workbook: Workbook = base, today = '2030-01-21') {
+function renderHome(workbook: Workbook = base, today = '2030-01-21', refresh?: RefreshState) {
   return render(
     <MemoryRouter>
-      <HomeView sheetId="s" workbook={workbook} today={today} />
+      <HomeView sheetId="s" workbook={workbook} today={today} refresh={refresh} />
     </MemoryRouter>,
   )
 }
@@ -74,5 +75,19 @@ describe('Home', () => {
     expect(screen.getByText('Next due').closest('a')).toHaveAttribute('href', '/cards/alpha?tab=pay')
     expect(screen.getByText('Income (plan)')).toBeInTheDocument()
     expect(screen.getByText('Interest (est.)')).toBeInTheDocument()
+  })
+
+  it('refreshes the balances with the ↻ button, and shows when and what is waiting', async () => {
+    const refresh: RefreshState = { refresh: vi.fn(), busy: false, error: null, updatedAt: new Date('2030-01-21T09:41:00'), pending: 2 }
+    renderHome(base, '2030-01-21', refresh)
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh balances' }))
+    expect(refresh.refresh).toHaveBeenCalled()
+    expect(screen.getByRole('status')).toHaveTextContent(/Updated 9:41\sAM · 2 entries waiting to send/)
+  })
+
+  it('spins and disables the button while refreshing, and shows a problem', () => {
+    renderHome(base, '2030-01-21', { refresh: vi.fn(), busy: true, error: 'You are offline. Balances show what is saved on this phone.', updatedAt: null, pending: 0 })
+    expect(screen.getByRole('button', { name: 'Refresh balances' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing…You are offline. Balances show what is saved on this phone.')
   })
 })
