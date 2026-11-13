@@ -81,6 +81,23 @@ export async function updateCells(sheetId: string, updates: { range: string; val
   })
 }
 
+/**
+ * Creates a spreadsheet in the user's Drive with these tabs (header row frozen), then writes their rows.
+ * With the drive.file scope the app can open the files it creates. Returns the new spreadsheet's ID.
+ */
+export async function createSpreadsheet(title: string, tabs: { title: string; rows: CellValue[][] }[], token: string): Promise<string> {
+  const created = await request<{ spreadsheetId: string }>(API, token, {
+    method: 'POST',
+    body: { properties: { title }, sheets: tabs.map((t) => ({ properties: { title: t.title, gridProperties: { frozenRowCount: 1 } } })) },
+  })
+  await updateCells(
+    created.spreadsheetId,
+    tabs.map((t) => ({ range: `${quoteTab(t.title)}!A1`, values: t.rows })),
+    token,
+  )
+  return created.spreadsheetId
+}
+
 /** Adds empty tabs (sheets) to the spreadsheet. */
 export async function addTabs(sheetId: string, titles: string[], token: string): Promise<void> {
   if (titles.length === 0) return

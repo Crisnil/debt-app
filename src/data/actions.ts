@@ -5,7 +5,7 @@ import { newId } from '../lib/ids'
 import type { Centavos } from '../lib/money'
 import { enqueue } from './outbox'
 import { cellRange, columnLetter, pesos, safeText, toRow } from './rows'
-import type { SheetUpdate } from './schema'
+import { STATEMENT_OPTIONAL_COLUMNS, STATEMENT_TAB_HEADERS, type SheetUpdate } from './schema'
 
 const now = () => new Date().toISOString()
 
@@ -513,6 +513,53 @@ export function newAccountId(wb: Pick<Workbook, 'accounts' | 'cards'>, label: st
   let id = base
   for (let n = 2; used.has(id); n++) id = `${base}-${n}`
   return id
+}
+
+export type NewCard = { name: string; bank: string; statementDay: number; dueDay: number; creditLimit: Centavos | null; monthlyRate: number }
+
+/** A statement tab name not used yet: "CC <name>", then "CC <name> 2"… */
+export function newStatementTab(wb: Pick<Workbook, 'headers' | 'cards'>, name: string): string {
+  const used = new Set([...Object.keys(wb.headers), ...wb.cards.map((c) => c.sheetTab)].map((t) => t.toLowerCase()))
+  const base = `CC ${name.replace(/[[\]:*?/\\']/g, '').trim()}`
+  let tab = base
+  for (let n = 2; used.has(tab.toLowerCase()); n++) tab = `${base} ${n}`
+  return tab
+}
+
+/**
+ * Adds a credit card: its statement tab (with headers), its row in the Cards tab, and its row in the Accounts tab
+ * (type credit_card), so it shows in Paid from.
+ */
+export async function addCard(sheetId: string, wb: Workbook, card: NewCard, token: string) {
+  const cardId = newAccountId(wb, card.name)
+  const tab = newStatementTab(wb, card.name)
+  await addTabs(sheetId, [tab], token)
+  const headers = [...STATEMENT_TAB_HEADERS, ...STATEMENT_OPTIONAL_COLUMNS]
+  await updateCells(sheetId, [{ range: `${quoteTab(tab)}!A1`, values: [headers] }], token)
+  const cardRow = toRow(wb.headers.Cards, {
+    card_id: cardId,
+    bank: safeText(card.bank),
+    name: safeText(card.name),
+    sheet_tab: tab,
+    statement_day: card.statementDay,
+    due_day: card.dueDay,
+    monthly_rate: card.monthlyRate,
+    status: 'active',
+    credit_limit: card.creditLimit === null ? '' : pesos(card.creditLimit),
+  })
+  await appendRows(sheetId, 'Cards', [cardRow], token)
+  const accountRow = toRow(wb.headers.Accounts, {
+    account_id: cardId,
+    label: safeText(card.name),
+    type: 'credit_card',
+    card_id: cardId,
+    opening_balance: '',
+    opening_date: '',
+    is_savings: false,
+    active: true,
+    created_at: now(),
+  })
+  await appendRows(sheetId, 'Accounts', [accountRow], token)
 }
 
 /** Adds an account (bank, cash, or e-wallet) as a new row of the Accounts tab. */

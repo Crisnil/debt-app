@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { addAccount, addIncomeSource, saveAccount, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
 import { accountLabel, moneyAccounts, TYPE_LABEL } from '../../domain/accounts'
+import { addMonths } from '../../domain/payables'
 import { incomeByMonth } from '../../domain/payday'
 import { monthLabel } from '../../ui/charts/palette'
 import { accountBalances } from '../../domain/balances'
@@ -19,6 +20,7 @@ import { AmountInput, Field, Select, SuccessNote, TextInput } from '../../ui/for
 import { SectionHead } from '../../ui/SectionHead'
 import { editButton, th, type Editing } from '../../ui/table'
 import { parsePositiveAmount } from '../add/parseAmount'
+import { AddCardForm } from './AddCardForm'
 
 const card = 'rounded-xl bg-white p-4 shadow-sm'
 
@@ -292,6 +294,7 @@ const groupHead = (title: string, note?: string) => (
 function AccountsTable({ workbook }: { workbook: Workbook }) {
   const [editing, setEditing] = useState<Editing<Account>>(null)
   const [editingCard, setEditingCard] = useState<Card | null>(null)
+  const [addingCard, setAddingCard] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
   const accounts = moneyAccounts(workbook).filter((a) => a.active)
   const cards = workbook.cards.filter((c) => c.active)
@@ -310,6 +313,7 @@ function AccountsTable({ workbook }: { workbook: Workbook }) {
   const done = (message: string) => {
     setEditing(null)
     setEditingCard(null)
+    setAddingCard(false)
     setSaved(message)
   }
 
@@ -401,7 +405,20 @@ function AccountsTable({ workbook }: { workbook: Workbook }) {
         {accountRows('e-wallet')}
         {accountRows('cash')}
       </table>
+      <button
+        type="button"
+        className="mt-3 text-sm text-green-900 underline"
+        onClick={() => {
+          setSaved(null)
+          setAddingCard(true)
+        }}
+      >
+        + Add credit card
+      </button>
       <SuccessNote message={saved} />
+      <Modal title="Add credit card" open={addingCard} onClose={() => setAddingCard(false)}>
+        {addingCard && <AddCardForm onSaved={done} />}
+      </Modal>
       <Modal title={editing?.item ? `Edit ${editing.item.label}` : 'Add account'} open={editing !== null} onClose={() => setEditing(null)}>
         <AccountForm key={editing?.item?.accountId ?? 'new'} workbook={workbook} account={editing?.item ?? null} onSaved={done} />
       </Modal>
@@ -472,13 +489,14 @@ function IncomeReceived({ workbook, monthlyPlan }: { workbook: Workbook; monthly
 function SavingsGoal({ workbook }: { workbook: Workbook }) {
   const edit = useSheetEdit()
   const s = (key: string, fallback: string) => workbook.settings[key]?.value || fallback
-  const [now, setNow] = useState(s('savings_goal_monthly', '1000'))
-  const [month, setMonth] = useState(s('savings_goal_change_month', '2027-03'))
-  const [after, setAfter] = useState(s('savings_goal_monthly_after', '15000'))
+  // A new sheet starts empty: the goal stays the same a year from now unless a later amount is typed.
+  const [now, setNow] = useState(s('savings_goal_monthly', ''))
+  const [month, setMonth] = useState(s('savings_goal_change_month', addMonths(todayIso().slice(0, 7), 12)))
+  const [after, setAfter] = useState(s('savings_goal_monthly_after', ''))
 
   function save() {
     const a = parsePositiveAmount(now)
-    const b = parsePositiveAmount(after)
+    const b = after.trim() ? parsePositiveAmount(after) : a
     if (a === null || b === null) return edit.fail('Enter amounts more than 0.')
     if (!/^\d{4}-\d{2}$/.test(month)) return edit.fail('Enter the month as YYYY-MM.')
     void edit.run('Saved savings goal.', (sheetId, wb, token) =>
@@ -495,10 +513,10 @@ function SavingsGoal({ workbook }: { workbook: Workbook }) {
           <AmountInput id="goal-now" value={now} onChange={(e) => setNow(e.target.value)} />
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="From month" htmlFor="goal-month" hint="When interest stops">
+          <Field label="From month" htmlFor="goal-month" hint="e.g. when a debt is paid off">
             <TextInput id="goal-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
           </Field>
-          <Field label="Then per month (₱)" htmlFor="goal-after">
+          <Field label="Then per month (₱)" htmlFor="goal-after" hint="Empty = same as now">
             <TextInput id="goal-after" inputMode="decimal" value={after} onChange={(e) => setAfter(e.target.value)} />
           </Field>
         </div>

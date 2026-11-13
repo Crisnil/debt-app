@@ -103,4 +103,20 @@ describe('Home', () => {
     expect(screen.getByRole('button', { name: 'Refresh balances' })).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('Refreshing…You are offline. Balances show what is saved on this phone.')
   })
+
+  it('shows the first steps for a new sheet, and hides them on request', async () => {
+    localStorage.clear()
+    const fresh: Workbook = { ...base, accounts: base.accounts.filter((a) => a.type === 'cash'), cards: [], incomeSources: [], settings: {} }
+    renderHome(fresh)
+    expect(screen.getByRole('heading', { name: 'Get started · 0 of 4 done' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add your salary' })).toHaveAttribute('href', '/settings')
+    await userEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    expect(screen.queryByRole('heading', { name: /Get started/ })).not.toBeInTheDocument()
+  })
+
+  it('does not show the first steps for a sheet in use', () => {
+    renderHome()
+    expect(screen.queryByRole('heading', { name: /Get started/ })).not.toBeInTheDocument()
+  })
 })
+
