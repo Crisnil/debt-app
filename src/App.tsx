@@ -50,7 +50,8 @@ export default function App() {
             <Route path="/cards/:cardId" element={<CardPage />} />
             <Route path="/reconcile/:cardId" element={<ReconcileRedirect />} />
             <Route path="/bills" element={<BillsPage />} />
-            <Route path="/spending" element={<SpendingPage />} />
+            <Route path="/transactions" element={<SpendingPage />} />
+            <Route path="/spending" element={<Navigate to="/transactions" replace />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/balances" element={<BalancesPage />} />

@@ -233,7 +233,7 @@ function ThisMonthRow({ workbook, forecasts, today }: { workbook: Workbook; fore
       <SectionHead title={`This month · ${monthLabel(month.month)}`} />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Metric label="Income (plan)" value={formatPeso(month.income)} />
-        <Metric label="Spent so far" value={formatPeso(spending.spent)} to="/spending">
+        <Metric label="Spent so far" value={formatPeso(spending.spent)} to="/transactions">
           {spendingH && <Badge health={spendingH} word={SPENDING_WORD[spendingH]} />}
           {spending.ratio !== null && (
             <p className="mt-0.5 text-xs text-slate-500">
