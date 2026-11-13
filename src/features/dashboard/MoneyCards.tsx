@@ -41,7 +41,7 @@ export function WhatWeHave({ workbook, today, refresh }: { workbook: Workbook; t
         <h2 className="font-medium text-slate-900">What we have</h2>
         <span className="flex items-center gap-3 text-sm">
           {refresh && <RefreshButton state={refresh} />}
-          <Link to="/balances" className="text-green-900 underline">
+          <Link to="/balances" className="rounded-full border border-green-900 px-3 py-1 font-medium text-green-900 active:bg-green-50">
             Check balances
           </Link>
           <Link to="/settings" className="text-green-900 underline">

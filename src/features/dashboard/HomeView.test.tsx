@@ -20,11 +20,12 @@ function renderHome(workbook: Workbook = base, today = '2030-01-21', refresh?: R
 }
 
 describe('Home', () => {
-  it('greets by name and shows the two actions', () => {
+  it('greets by name; adding is on the + button only', () => {
     renderHome({ ...base, settings: { ...base.settings, display_name: { value: 'Sample', row: 9 } } })
     expect(screen.getByText('👋 Welcome Sample!')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '+ Add expense' })).toHaveAttribute('href', '/add')
-    expect(screen.getByRole('link', { name: '+ Add savings' })).toHaveAttribute('href', '/add/other?type=save')
+    expect(screen.queryByRole('link', { name: '+ Add expense' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '+ Add savings' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Check balances' })[0]).toHaveAttribute('href', '/balances')
   })
 
   it('compares what we owe with savings, with details on request', async () => {

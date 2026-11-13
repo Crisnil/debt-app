@@ -15,15 +15,20 @@ const LAST_FROM_KEY = 'debt-app.last-move-from'
  * Money moved between two of your accounts, e.g. an ATM withdrawal (savings → Cash) or a GCash load. Saved as a
  * transfer: not spending. Out of a savings account lowers saved this month; into one counts toward the savings goal.
  */
-export function MoveMoneyForm({ sheetId, workbook }: { sheetId: string; workbook: Workbook }) {
+export function MoveMoneyForm({ sheetId, workbook, initialTo }: { sheetId: string; workbook: Workbook; initialTo?: string }) {
   const accounts = moneyAccounts(workbook).filter((a) => a.active)
   const has = (id: string | null | undefined) => accounts.some((a) => a.accountId === id)
   const cash = accounts.find((a) => a.type === 'cash')?.accountId
   const salaryAccount = workbook.incomeSources.find((s) => s.sourceId === 'salary')?.toAccount
+  // ?to=savings: the savings goal account (the old "Add savings").
+  const toSavings = initialTo === 'savings' ? accounts.find((a) => a.isSavings)?.accountId : initialTo
+  const presetTo = has(toSavings) ? toSavings : undefined
   const lastFrom = localStorage.getItem(LAST_FROM_KEY)
-  const firstFrom = [lastFrom, accounts.find((a) => a.isSavings)?.accountId, salaryAccount].find((id) => has(id) && id !== cash) ?? accounts[0]?.accountId ?? ''
+  const firstFrom = presetTo
+    ? ([lastFrom, salaryAccount].find((id) => has(id) && id !== presetTo) ?? accounts.find((a) => a.accountId !== presetTo)?.accountId ?? '')
+    : ([lastFrom, accounts.find((a) => a.isSavings)?.accountId, salaryAccount].find((id) => has(id) && id !== cash) ?? accounts[0]?.accountId ?? '')
   const [from, setFrom] = useState(firstFrom)
-  const [to, setTo] = useState(cash && cash !== firstFrom ? cash : (accounts.find((a) => a.accountId !== firstFrom)?.accountId ?? ''))
+  const [to, setTo] = useState(presetTo ?? (cash && cash !== firstFrom ? cash : (accounts.find((a) => a.accountId !== firstFrom)?.accountId ?? '')))
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayIso())
   const [note, setNote] = useState('')
@@ -67,7 +72,7 @@ export function MoveMoneyForm({ sheetId, workbook }: { sheetId: string; workbook
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <p className="text-sm text-slate-600">For an ATM withdrawal, an e-wallet load, or money between your accounts.</p>
+      <p className="text-sm text-slate-600">For an ATM withdrawal, an e-wallet load, money put into savings, or any move between your accounts.</p>
       <Field label="Amount (₱)" htmlFor="mv-amount">
         <AmountInput id="mv-amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
