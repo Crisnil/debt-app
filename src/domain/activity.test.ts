@@ -39,4 +39,14 @@ describe('transactions list', () => {
     expect(accounts).toContain('piggy')
     expect(accounts).not.toContain('salary')
   })
+
+  it('searches the description, note, and category, any case, every word', () => {
+    const find = (search: string, month = '2030-01') => filterEntries(entries(base), { month, kind: '', accountId: '', category: '', search }).map((e) => e.label)
+    expect(find('pharmacy')).toEqual(['Sample Pharmacy'])
+    expect(find('GROCERY')).toEqual(['Sample Grocer'])
+    expect(find('sample cafe')).toEqual(['Sample Cafe'])
+    expect(find('piggy cash')).toEqual(['Piggy Bank → Cash'])
+    expect(find('pharmacy', '2029-12')).toEqual([])
+    expect(find('before opening', '')).toEqual(['Payroll → Piggy Bank'])
+  })
 })

@@ -10,7 +10,11 @@ import { MorePage } from './features/MorePage'
 import { PlanPage } from './features/plan/PlanPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SpendingPage } from './features/spending/SpendingPage'
-import { useSync } from './state/hooks'
+import { useEffect } from 'react'
+import { todayIso } from './domain/dues'
+import { forecastCards } from './domain/forecast'
+import { badgeCount } from './domain/home'
+import { useLiveWorkbook, useSync } from './state/hooks'
 import { AddButton } from './ui/AddButton'
 import { MainNav } from './ui/MainNav'
 
@@ -30,6 +34,21 @@ function SyncBar() {
   )
 }
 
+/**
+ * Number on the installed app's icon: bills late or due in 3 days. Works where the phone supports app badges
+ * (installed app on Android, iOS 16.4+). Nothing shows otherwise.
+ */
+function DueBadge() {
+  const { workbook } = useLiveWorkbook()
+  useEffect(() => {
+    if (!workbook || !('setAppBadge' in navigator)) return
+    const today = todayIso()
+    const count = badgeCount(workbook, forecastCards(workbook, today), today)
+    void (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => {})
+  }, [workbook])
+  return null
+}
+
 /** Old "Check statement" links. */
 function ReconcileRedirect() {
   const { cardId = '' } = useParams()
@@ -42,6 +61,7 @@ export default function App() {
       <MainNav />
       <div className="flex min-w-0 flex-1 flex-col">
         <SyncBar />
+        <DueBadge />
         <main className="flex-1 px-4 pt-6 pb-24 lg:px-10 lg:pt-8 lg:pb-10">
           <Routes>
             <Route path="/" element={<DashboardPage />} />

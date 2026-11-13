@@ -97,13 +97,21 @@ export function entries(wb: Workbook): Entry[] {
   return list.sort((a, b) => b.date.localeCompare(a.date))
 }
 
-export type EntryFilter = { month: string; kind: EntryKind | ''; accountId: string; category: string }
+/** month '' is every month. search: words in the description, note, or category, any case. */
+export type EntryFilter = { month: string; kind: EntryKind | ''; accountId: string; category: string; search?: string }
 
-/** Entries in the month, then of one kind, for one account (either side), and one category (purchases only) when set. */
+/** Words of an entry to search: its description, note, and (purchases) category and the expense note. */
+function searchText(e: Entry): string {
+  return [e.label, e.note, e.item ? categoryOf(e.item) : '', e.item?.txn?.note ?? ''].join(' ').toLowerCase()
+}
+
+/** Entries in the month, then of one kind, for one account (either side), one category (purchases only), and with every searched word, when set. */
 export function filterEntries(list: Entry[], filter: EntryFilter): Entry[] {
+  const words = (filter.search ?? '').toLowerCase().split(/\s+/).filter(Boolean)
   return list.filter(
     (e) =>
       e.date.startsWith(filter.month) &&
+      (words.length === 0 || words.every((w) => searchText(e).includes(w))) &&
       (!filter.kind || e.kind === filter.kind) &&
       (!filter.accountId || e.from === filter.accountId || e.to === filter.accountId) &&
       (!filter.category || (e.item !== undefined && categoryOf(e.item) === filter.category)),

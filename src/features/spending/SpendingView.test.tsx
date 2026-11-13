@@ -92,4 +92,19 @@ describe('Transactions page', () => {
     await userEvent.selectOptions(screen.getByLabelText('Account'), 'alpha')
     expect(screen.queryByText(/of the Plan/)).not.toBeInTheDocument()
   })
+
+  it('searches the entries, in the month or in all months', async () => {
+    renderSpending()
+    await userEvent.type(screen.getByLabelText('Search'), 'pharmacy')
+    expect(rows()).toHaveLength(1)
+    expect(screen.getByText('1 found in Jan 2030. To look in every month, choose All months.')).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Search'))
+    await userEvent.type(screen.getByLabelText('Search'), 'before opening')
+    expect(screen.getByText('0 found in Jan 2030. To look in every month, choose All months.')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Month'), '')
+    expect(rows()).toHaveLength(1)
+    expect(screen.getByText('1 found in all months.')).toBeInTheDocument()
+    expect(screen.getByText(/Spent in all months/)).toBeInTheDocument()
+  })
 })
+
