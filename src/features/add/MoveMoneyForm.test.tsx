@@ -34,6 +34,18 @@ describe('Move money', () => {
     expect(screen.getByRole('group', { name: 'To' })).not.toHaveTextContent('Cash')
   })
 
+  it('offers e-wallets in From and To, and says to log what you buy with it as expenses', async () => {
+    const wb: Workbook = { ...base, accounts: [...base.accounts, { ...base.accounts[0], accountId: 'gcash', label: 'GCash', type: 'e-wallet', isSavings: false, row: 99 }] }
+    render(<MoveMoneyForm sheetId="mv3" workbook={wb} />)
+    expect(within(screen.getByRole('group', { name: 'From' })).getByRole('button', { name: 'GCash' })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('group', { name: 'From' })).getByRole('button', { name: 'Payroll' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'To' })).getByRole('button', { name: 'GCash' }))
+    expect(screen.getByText('Not spending. Log what you buy with GCash as expenses paid from GCash.')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Amount (₱)'), '300')
+    await userEvent.click(screen.getByRole('button', { name: 'Move money' }))
+    expect(readOutbox('mv3')).toContainEqual(expect.objectContaining({ tab: 'Transfers', record: expect.objectContaining({ from_account: 'payroll', to_account: 'gcash', amount: 300 }) }))
+  })
+
   it('a move changes both balances, is not spending, and out of savings lowers saved this month', () => {
     const atm: Transfer = { transferId: 'atm', date: '2030-01-20', fromAccount: 'piggy', toAccount: 'cash', amount: 50000, note: 'ATM' }
     const wb: Workbook = { ...base, transfers: [...base.transfers, atm] }

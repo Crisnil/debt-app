@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { addExpense, addPayable, savePayable, setPayableAmount } from '../../data/actions'
-import { accountLabel, cardForMethod, expenseCategories } from '../../domain/accounts'
+import { cardForMethod, expenseCategories } from '../../domain/accounts'
 import { billFor } from '../../domain/billing'
 import { todayIso } from '../../domain/dues'
 import { monthsToKeep, PAYABLE_CATEGORIES, type PayableMonth } from '../../domain/payables'
@@ -21,7 +21,6 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
   const [error, setError] = useState<string | null>(null)
   const card = cardForMethod(workbook, methodId)
   const bill = card ? billFor(card, date) : null
-  const isWallet = workbook.accounts.find((a) => a.accountId === methodId)?.type === 'e-wallet'
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -52,7 +51,6 @@ export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; 
           Goes on the <b>{card.name}</b> bill of {bill.statementDate}. When you paste that statement, the app suggests the match.
         </p>
       )}
-      {isWallet && <p className="text-xs text-slate-600">Lowers your {accountLabel(workbook, methodId)} balance. Not counted as spending again (the load was).</p>}
       <Field label="Date" htmlFor={`payd-${item.payable.payableId}-${item.month}`}>
         <TextInput id={`payd-${item.payable.payableId}-${item.month}`} type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} />
       </Field>

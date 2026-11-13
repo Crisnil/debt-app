@@ -105,11 +105,10 @@ describe('payable totals', () => {
 })
 
 describe('spending', () => {
-  it('does not count a bill paid from an e-wallet again (the load was counted)', () => {
+  it('counts a bill paid from an e-wallet as spending (a load is a transfer, not spending)', () => {
     const wb = wbWith([payable({ payableId: 'net' })], [pay('x1', 'net', '2030-01', 150000, 'gcash')])
     const withWallet = { ...wb, accounts: [...wb.accounts, { ...wb.accounts[0], accountId: 'gcash', label: 'GCash', type: 'e-wallet' as const }] }
-    expect(spendingItems(withWallet).some((i) => i.amount === 150000)).toBe(false)
-    expect(spendingItems(wb).some((i) => i.amount === 150000)).toBe(true)
+    expect(spendingItems(withWallet).some((i) => i.amount === 150000)).toBe(true)
   })
 })
 

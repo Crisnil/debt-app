@@ -62,10 +62,10 @@ describe('balance check', () => {
     expect(spendingItems(wb)).toEqual(spendingItems(base))
   })
 
-  it('never counts an e-wallet drop: its purchases are not logged', () => {
+  it('counts an e-wallet drop like a bank: its purchases are logged as expenses', () => {
     const wallet = { ...base.accounts[2], accountId: 'wallet', label: 'Wallet', type: 'e-wallet' as const, openingBalance: 50000 }
     const wb: Workbook = { ...withChecks(check('wallet', '2030-01-20', 10000)), accounts: [...base.accounts, wallet] }
-    expect(checkResults(wb)[0]).toMatchObject({ difference: -40000, notRecorded: 0 })
+    expect(checkResults(wb)[0]).toMatchObject({ difference: -40000, notRecorded: 40000 })
     expect(balanceOf(wb, 'wallet')).toBe(10000)
   })
 
