@@ -129,3 +129,38 @@ export function useSync(): SyncState {
 
   return { pending: outbox.length, syncing, error, syncNow: () => void syncNow() }
 }
+
+export type RefreshState = { refresh: () => void; busy: boolean; error: string | null; updatedAt: Date | null; pending: number }
+
+/** Refresh on request: sends waiting entries, then reloads the sheet (e.g. after a change made in the sheet). */
+export function useRefresh(): RefreshState {
+  const { sheet } = useSession()
+  const queryClient = useQueryClient()
+  const { data } = useWorkbook()
+  const outbox = useOutbox()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
+
+  const refresh = useCallback(async () => {
+    const token = currentToken()
+    if (!sheet || !token) return setError('Sign in to refresh.')
+    if (!navigator.onLine) return setError('You are offline. Balances show what is saved on this phone.')
+    setBusy(true)
+    setError(null)
+    try {
+      if (data && readOutbox(sheet.id).length > 0) await flushOutbox(sheet.id, data.headers, token)
+      const key = ['workbook', sheet.id]
+      await queryClient.invalidateQueries({ queryKey: key })
+      const failed = queryClient.getQueryState(key)?.error
+      if (failed) throw failed
+      setUpdatedAt(new Date())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [sheet, data, queryClient])
+
+  return { refresh: () => void refresh(), busy, error, updatedAt, pending: outbox.length }
+}

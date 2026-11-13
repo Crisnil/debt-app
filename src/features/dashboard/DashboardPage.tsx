@@ -7,7 +7,7 @@ import { carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth }
 import { monthsUntil, payoffPaths } from '../../domain/payoff'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
-import { useLiveWorkbook, useSession } from '../../state/hooks'
+import { useLiveWorkbook, useRefresh, useSession, type RefreshState } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { DebtSavingsBar } from '../../ui/charts/DebtSavingsBar'
 import { Donut } from '../../ui/charts/Donut'
@@ -256,6 +256,7 @@ function ThisMonthRow({ workbook, forecasts, today }: { workbook: Workbook; fore
 export function DashboardPage() {
   const { sheet, signedIn, signIn } = useSession()
   const { workbook, query } = useLiveWorkbook()
+  const refresh = useRefresh()
   const signInAction = useAction(signIn)
 
   if (!sheet) {
@@ -296,11 +297,11 @@ export function DashboardPage() {
   }
   if (!workbook) return <p className="text-slate-600">Reading your sheet…</p>
 
-  return <HomeView sheetId={sheet.id} workbook={workbook} today={todayIso()} />
+  return <HomeView sheetId={sheet.id} workbook={workbook} today={todayIso()} refresh={refresh} />
 }
 
 /** The Home page body for a loaded workbook. */
-export function HomeView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: IsoDate }) {
+export function HomeView({ sheetId, workbook, today, refresh }: { sheetId: string; workbook: Workbook; today: IsoDate; refresh?: RefreshState }) {
   const forecasts = forecastCards(workbook, today)
   const owed = owedParts(workbook, forecasts, today)
   const name = workbook.settings.display_name?.value
@@ -323,7 +324,7 @@ export function HomeView({ sheetId, workbook, today }: { sheetId: string; workbo
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
         <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
-        <WhatWeHave workbook={workbook} today={today} />
+        <WhatWeHave workbook={workbook} today={today} refresh={refresh} />
       </div>
       <Tiles workbook={workbook} forecasts={forecasts} today={today} />
       <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
