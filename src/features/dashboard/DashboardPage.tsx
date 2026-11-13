@@ -65,7 +65,7 @@ function Progress({ workbook, owed, today, debtFree }: { workbook: Workbook; owe
       <DebtSavingsBar owed={owedTotal} saved={savedTotal} />
       <p className="mt-2 flex flex-wrap justify-between gap-x-4 text-xs text-slate-600">
         <span>{savedTotal >= owedTotal && owedTotal > 0 ? '✓ Savings are more than what we owe' : `Savings cover ${cover}% of what we owe`}</span>
-        <Link to="/plan" className="text-green-900 underline">
+        <Link to="/stats?tab=plan" className="text-green-900 underline">
           {debtFree ? `Debt-free ${monthLabel(debtFree)} (${monthsUntil(today, debtFree)} months)` : 'Not debt-free within 5 years at this pace'}
         </Link>
       </p>
@@ -165,7 +165,7 @@ export function WhatWeOwe({ workbook, forecasts, owed }: { workbook: Workbook; f
   if (total === 0) return null
   return (
     <div className={panel}>
-      <SectionHead title="What we owe" to="/cards" link="Cards" />
+      <SectionHead title="What we owe" to="/stats?tab=cards" link="Cards" />
       <Donut parts={parts} centerLabel="owed">
         <p className="mb-2 border-b border-slate-100 pb-2 text-sm text-slate-600">
           Debt status:{' '}

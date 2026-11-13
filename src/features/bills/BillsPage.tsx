@@ -262,7 +262,7 @@ export function BillsView({ sheetId, workbook, today }: { sheetId: string; workb
         Monthly payables come back by themselves on the 1st of each month. Card bills are on Cards.{' '}
         {canPlan(workbook) ? (
           <>
-            Edit a bill to add it to your <Link to="/plan" className="underline">planned monthly expenses</Link> with + Plan, until its last payment.
+            Edit a bill to add it to your <Link to="/stats?tab=plan" className="underline">planned monthly expenses</Link> with + Plan, until its last payment.
           </>
         ) : (
           'To add bills to your plan, open Settings → Update sheet.'

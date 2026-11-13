@@ -19,8 +19,8 @@ function foldOther(parts: DonutPart[]): DonutPart[] {
   return [...keep, { id: 'other', name: `Other: ${rest.map((p) => p.name).join(', ')}`, amount: rest.reduce((s, p) => s + p.amount, 0), color: OTHER_COLOR, group }]
 }
 
-/** Ring of parts with the total in the middle and a legend with the amounts. The legend carries every value. */
-export function Donut({ parts: given, centerLabel, children }: { parts: DonutPart[]; centerLabel: string; children?: ReactNode }) {
+/** Ring of parts with the total in the middle and a legend with the amounts (and each share of the total with showShare). The legend carries every value. */
+export function Donut({ parts: given, centerLabel, showShare = false, children }: { parts: DonutPart[]; centerLabel: string; showShare?: boolean; children?: ReactNode }) {
   const parts = foldOther(given)
   const total = parts.reduce((s, p) => s + p.amount, 0)
   const shares = parts.map((p) => (total > 0 ? (p.amount / total) * 100 : 0))
@@ -75,9 +75,10 @@ export function Donut({ parts: given, centerLabel, children }: { parts: DonutPar
                     <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: p.color }} />
                     {p.name}
                   </span>
-                  <b className="text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {formatPeso(p.amount)}
-                  </b>
+                  <span className="flex items-baseline gap-3" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <b className="text-slate-900">{formatPeso(p.amount)}</b>
+                    {showShare && <span className="w-9 text-right text-xs text-green-900">{Math.round(shares[i])}%</span>}
+                  </span>
                 </>
               )
               return [

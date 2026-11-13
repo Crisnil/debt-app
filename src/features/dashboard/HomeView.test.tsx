@@ -47,7 +47,7 @@ describe('Home', () => {
     expect(screen.getByRole('img', { name: 'Owed ₱10,799.25, savings ₱5,200.00' })).toBeInTheDocument()
     expect(screen.getByText('Savings cover 48% of what we owe')).toBeInTheDocument()
     // The fixture's last installment is on the Apr 2030 bill and nothing is carried.
-    expect(screen.getByRole('link', { name: 'Debt-free Apr 2030 (3 months)' })).toHaveAttribute('href', '/plan')
+    expect(screen.getByRole('link', { name: 'Debt-free Apr 2030 (3 months)' })).toHaveAttribute('href', '/stats?tab=plan')
     await userEvent.click(screen.getByRole('button', { name: '▸ Show details' }))
     expect(screen.getByText('Savings · Piggy Bank')).toBeInTheDocument()
   })
@@ -77,7 +77,7 @@ describe('Home', () => {
 
   it('shows swipe cards: spendable now, each account (Debit, then Cash), then each credit card', () => {
     renderHome()
-    const cards = within(screen.getByRole('heading', { name: 'Accounts and cards' }).nextElementSibling as HTMLElement).getAllByRole('listitem')
+    const cards = within(screen.getByRole('list', { name: 'Accounts and cards' })).getAllByRole('listitem')
     expect(cards.map((c) => c.textContent!.split('₱')[0])).toEqual(['Spendable now', 'Payroll · Debit', 'Piggy Bank · Debitsavings goal', 'Cash · Cash', 'Alpha · Credit', 'Beta · Credit'])
     expect(cards[0]).toHaveTextContent(/Savings goal ₱5,200\.00 · Total/)
     expect(cards[2]).toHaveTextContent('₱5,200.00')

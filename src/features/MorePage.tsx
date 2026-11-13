@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom'
 
 const PAGES = [
   { to: '/bills', label: 'Bills', detail: 'Bills and payables this month, and subscriptions on cards' },
-  { to: '/plan', label: 'Plan', detail: 'What we owe, bills ahead, and when we are debt-free' },
   { to: '/balances', label: 'Check balances', detail: 'Type the real balance of each account' },
   { to: '/settings', label: 'Settings', detail: 'Accounts, income, savings goal, and your sheet' },
 ]

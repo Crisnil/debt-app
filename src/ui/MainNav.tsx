@@ -3,10 +3,9 @@ import { NavLink, useLocation } from 'react-router-dom'
 /** phone: in the bottom bar (the + button sits in the middle). wide: in the sidebar. Pages left out of the bottom bar are on More. */
 const items = [
   { to: '/', label: 'Home', phone: true, wide: true },
-  { to: '/cards', label: 'Cards', phone: true, wide: true },
+  { to: '/stats', label: 'Stats', phone: true, wide: true },
   { to: '/bills', label: 'Bills', phone: false, wide: true },
   { to: '/transactions', label: 'Transactions', phone: true, wide: true },
-  { to: '/plan', label: 'Plan', phone: false, wide: true },
   { to: '/balances', label: 'Check balances', phone: false, wide: true },
   { to: '/settings', label: 'Settings', phone: false, wide: true },
   { to: '/more', label: 'More', phone: true, wide: false },
@@ -14,6 +13,9 @@ const items = [
 
 /** Pages under More: the More tab stays marked on them. */
 const MORE_PAGES = items.filter((i) => !i.phone).map((i) => ({ to: i.to, label: i.label }))
+
+/** A card's page is under Stats (its Cards tab). */
+const underStats = (to: string, pathname: string) => to === '/stats' && pathname.startsWith('/cards')
 
 // Bottom bar on phones, sidebar on wide screens (lg and up).
 export function MainNav() {
@@ -27,7 +29,7 @@ export function MainNav() {
       <p className="hidden px-6 pt-6 pb-4 text-lg font-semibold text-green-900 lg:block">Debt App</p>
       <ul className="mx-auto grid max-w-md grid-cols-5 lg:max-w-none lg:grid-cols-1 lg:gap-1 lg:px-3">
         {items.map((item) => [
-          // Phones: an empty middle slot for the + button (AddButton), between Cards and Transactions.
+          // Phones: an empty middle slot for the + button (AddButton), between Stats and Transactions.
           item.to === '/transactions' && <li key="add-slot" className="lg:hidden" aria-hidden="true" />,
           <li key={item.to} className={`${item.phone ? '' : 'hidden'} ${item.wide ? 'lg:block' : 'lg:hidden'}`}>
             <NavLink
@@ -35,7 +37,7 @@ export function MainNav() {
               end={item.to === '/'}
               className={({ isActive }) =>
                 `block py-3 text-center text-xs sm:text-sm lg:rounded-lg lg:px-3 lg:py-2 lg:text-left ${
-                  isActive || (item.to === '/more' && onMorePage) ? 'font-semibold text-green-900 lg:bg-green-50' : 'text-slate-500 lg:hover:bg-slate-50'
+                  isActive || underStats(item.to, pathname) || (item.to === '/more' && onMorePage) ? 'font-semibold text-green-900 lg:bg-green-50' : 'text-slate-500 lg:hover:bg-slate-50'
                 }`
               }
             >
