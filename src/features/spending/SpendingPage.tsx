@@ -10,7 +10,7 @@ import { formatPeso } from '../../lib/money'
 import { monthLabel, OTHER_COLOR, STATUS } from '../../ui/charts/palette'
 import { Field, Select, SuccessNote } from '../../ui/form'
 import { Modal } from '../../ui/Modal'
-import { EntryVoid, ItemDialogBody } from './ItemDialog'
+import { EntryCorrection, ItemDialogBody } from './ItemDialog'
 import { WithWorkbook } from '../WithWorkbook'
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
@@ -146,8 +146,8 @@ function EntryDetails({ workbook, entry: e, onSaved }: { workbook: Workbook; ent
           </>
         )}
       </dl>
-      <p className="text-slate-600">Not spending. To change it, edit the {e.tab} tab of the sheet.</p>
-      {e.ref && <EntryVoid entry={e.ref} label={e.label} onSaved={onSaved} />}
+      <p className="text-slate-600">Not spending.</p>
+      {e.ref && <EntryCorrection workbook={workbook} entry={e} onSaved={onSaved} />}
     </div>
   )
 }

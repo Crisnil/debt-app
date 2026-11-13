@@ -71,6 +71,17 @@ export function enqueue(sheetId: string, item: OutboxItem) {
   writeOutbox(sheetId, [...readOutbox(sheetId), item])
 }
 
+/**
+ * Takes a waiting row back before it is sent (Undo). False when it is not waiting, or while rows are being sent:
+ * then it may already be in the sheet.
+ */
+export function discard(sheetId: string, key: string): boolean {
+  const items = readOutbox(sheetId)
+  if (running || !items.some((i) => i.key === key)) return false
+  writeOutbox(sheetId, items.filter((i) => i.key !== key))
+  return true
+}
+
 export function clearOutbox(sheetId: string) {
   writeOutbox(sheetId, [])
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { readOutbox } from '../../data/outbox'
@@ -7,6 +7,7 @@ import { accountBalances, savedInMonth } from '../../domain/balances'
 import { spendingItems } from '../../domain/reconcile'
 import type { Transfer, Workbook } from '../../domain/types'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
+import { renderWithSheet } from '../../test/providers'
 import { MoveMoneyForm } from './MoveMoneyForm'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
@@ -15,7 +16,7 @@ describe('Move money', () => {
   beforeEach(() => localStorage.clear())
 
   it('starts from savings to Cash, and says that taking money out of savings lowers saved this month', async () => {
-    render(<MoveMoneyForm sheetId="mv" workbook={base} />)
+    renderWithSheet(<MoveMoneyForm sheetId="mv" workbook={base} />, 'mv', base)
     expect(screen.getByRole('group', { name: 'From' }).querySelector('[aria-pressed="true"]')).toHaveTextContent('Piggy Bank')
     expect(screen.getByRole('group', { name: 'To' }).querySelector('[aria-pressed="true"]')).toHaveTextContent('Cash')
     await userEvent.type(screen.getByLabelText('Amount (₱)'), '500')
@@ -27,7 +28,7 @@ describe('Move money', () => {
 
   it('remembers the last From account and never offers the From account as To', async () => {
     localStorage.setItem('debt-app.last-move-from', 'payroll')
-    render(<MoveMoneyForm sheetId="mv2" workbook={base} />)
+    renderWithSheet(<MoveMoneyForm sheetId="mv2" workbook={base} />, 'mv2', base)
     expect(screen.getByRole('group', { name: 'From' }).querySelector('[aria-pressed="true"]')).toHaveTextContent('Payroll')
     expect(screen.getByText('Not spending. Log what you buy with it as expenses.')).toBeInTheDocument()
     await userEvent.click(within(screen.getByRole('group', { name: 'From' })).getByRole('button', { name: 'Cash' }))
@@ -36,7 +37,7 @@ describe('Move money', () => {
 
   it('offers e-wallets in From and To, and says to log what you buy with it as expenses', async () => {
     const wb: Workbook = { ...base, accounts: [...base.accounts, { ...base.accounts[0], accountId: 'gcash', label: 'GCash', type: 'e-wallet', isSavings: false, row: 99 }] }
-    render(<MoveMoneyForm sheetId="mv3" workbook={wb} />)
+    renderWithSheet(<MoveMoneyForm sheetId="mv3" workbook={wb} />, 'mv3', wb)
     expect(within(screen.getByRole('group', { name: 'From' })).getByRole('button', { name: 'GCash' })).toBeInTheDocument()
     await userEvent.click(within(screen.getByRole('group', { name: 'From' })).getByRole('button', { name: 'Payroll' }))
     await userEvent.click(within(screen.getByRole('group', { name: 'To' })).getByRole('button', { name: 'GCash' }))

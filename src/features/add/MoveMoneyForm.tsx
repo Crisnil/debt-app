@@ -6,8 +6,9 @@ import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
+import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from './parseAmount'
+import { SavedNote, type Saved } from './SavedNote'
 
 const LAST_FROM_KEY = 'debt-app.last-move-from'
 
@@ -33,7 +34,7 @@ export function MoveMoneyForm({ sheetId, workbook, initialTo }: { sheetId: strin
   const [date, setDate] = useState(todayIso())
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [saved, setSaved] = useState<Saved | null>(null)
 
   if (accounts.length < 2) {
     return <p className="text-sm text-slate-600">Add a second account first (Settings → Accounts → + Add account).</p>
@@ -63,9 +64,9 @@ export function MoveMoneyForm({ sheetId, workbook, initialTo }: { sheetId: strin
     if (cents === null) return setError('Enter an amount more than 0.')
     if (!from || !to || from === to) return setError('Choose two different accounts.')
     setError(null)
-    addTransfer(sheetId, { date, fromAccount: from, toAccount: to, amount: cents, note: note.trim() })
+    const move = addTransfer(sheetId, { date, fromAccount: from, toAccount: to, amount: cents, note: note.trim() })
     localStorage.setItem(LAST_FROM_KEY, from)
-    setSaved(`Moved ${formatPeso(cents)} from ${label(from)} to ${label(to)}.`)
+    setSaved({ message: `Moved ${formatPeso(cents)} from ${label(from)} to ${label(to)}.`, ref: { tab: 'Transfers', id: move.transferId } })
     setAmount('')
     setNote('')
   }
@@ -89,7 +90,7 @@ export function MoveMoneyForm({ sheetId, workbook, initialTo }: { sheetId: strin
         Move money
       </Button>
       <ErrorNote message={error} />
-      <SuccessNote message={saved} />
+      {saved && <SavedNote key={saved.ref.id} saved={saved} amountId="mv-amount" onClear={() => setSaved(null)} />}
     </form>
   )
 }

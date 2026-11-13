@@ -6,8 +6,9 @@ import type { Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
+import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from '../add/parseAmount'
+import { SavedNote, type Saved } from '../add/SavedNote'
 
 export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; workbook: Workbook; cardId: string }) {
   const accounts = moneyAccounts(workbook).filter((a) => a.active)
@@ -17,7 +18,7 @@ export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; wo
   const [date, setDate] = useState(todayIso())
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [saved, setSaved] = useState<Saved | null>(null)
 
   const card = workbook.cards.find((c) => c.cardId === cardId)
   const summary = card ? summarizeCard(workbook, card, todayIso()) : null
@@ -28,8 +29,8 @@ export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; wo
     const cents = parsePositiveAmount(amount)
     if (cents === null) return setError('Enter an amount more than 0.')
     setError(null)
-    addPayment(sheetId, { date, cardId, amount: cents, fromAccount: from, note: note.trim() })
-    setSaved(`Paid ${formatPeso(cents)} to ${card?.name ?? cardId}.`)
+    const payment = addPayment(sheetId, { date, cardId, amount: cents, fromAccount: from, note: note.trim() })
+    setSaved({ message: `Paid ${formatPeso(cents)} to ${card?.name ?? cardId}.`, ref: { tab: 'Payments', id: payment.payId } })
     setAmount('')
     setNote('')
   }
@@ -61,7 +62,7 @@ export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; wo
         Save payment
       </Button>
       <ErrorNote message={error} />
-      <SuccessNote message={saved} />
+      {saved && <SavedNote key={saved.ref.id} saved={saved} amountId="pay-amount" onClear={() => setSaved(null)} />}
     </form>
   )
 }

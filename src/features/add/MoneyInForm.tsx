@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
-import { addIncome } from '../../data/actions'
+import { addIncome, type IncomeInput } from '../../data/actions'
 import { moneyAccounts } from '../../domain/accounts'
 import { todayIso } from '../../domain/dues'
 import type { IncomeType, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
+import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from './parseAmount'
+import { SavedNote, type Saved } from './SavedNote'
 
 /** One-time income: counts in the plan's income. */
 const EXTRA: { value: IncomeType; label: string }[] = [
@@ -39,7 +40,7 @@ export function MoneyInForm({ sheetId, workbook }: { sheetId: string; workbook: 
   const [date, setDate] = useState(todayIso())
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [saved, setSaved] = useState<Saved | null>(null)
 
   const source = sources.find((s) => s.sourceId === kind)
   const fromPerson = FROM_PERSON.some((o) => o.value === kind)
@@ -61,18 +62,18 @@ export function MoneyInForm({ sheetId, workbook }: { sheetId: string; workbook: 
     if (cents === null) return setError('Enter an amount more than 0.')
     if (fromPerson && !who.trim()) return setError('Enter who gave the money.')
     setError(null)
+    const saveAs = (message: string, input: Omit<IncomeInput, 'date' | 'amount' | 'toAccount'>) => {
+      const entry = addIncome(sheetId, { date, amount: cents, toAccount: to, ...input })
+      setSaved({ message, ref: { tab: 'IncomeLog', id: entry.incomeId } })
+    }
     if (source) {
-      const type: IncomeType = source.sourceId === 'allowance' ? 'allowance' : 'salary'
-      addIncome(sheetId, { date, sourceId: source.sourceId, type, amount: cents, toAccount: to, note: note.trim() })
-      setSaved(`Saved ${source.label} ${formatPeso(cents)}.`)
+      saveAs(`Saved ${source.label} ${formatPeso(cents)}.`, { sourceId: source.sourceId, type: source.sourceId === 'allowance' ? 'allowance' : 'salary', note: note.trim() })
     } else if (fromPerson) {
-      addIncome(sheetId, { date, sourceId: '', type: kind as IncomeType, amount: cents, toAccount: to, note: [`From ${who.trim()}`, note.trim()].filter(Boolean).join(' · ') })
-      setSaved(`Saved ${formatPeso(cents)} from ${who.trim()}.`)
+      saveAs(`Saved ${formatPeso(cents)} from ${who.trim()}.`, { sourceId: '', type: kind as IncomeType, note: [`From ${who.trim()}`, note.trim()].filter(Boolean).join(' · ') })
       setAmount('')
       setWho('')
     } else {
-      addIncome(sheetId, { date, sourceId: '', type: kind as IncomeType, amount: cents, toAccount: to, note: note.trim() })
-      setSaved(`Saved income ${formatPeso(cents)}.`)
+      saveAs(`Saved income ${formatPeso(cents)}.`, { sourceId: '', type: kind as IncomeType, note: note.trim() })
       setAmount('')
     }
     setNote('')
@@ -107,7 +108,7 @@ export function MoneyInForm({ sheetId, workbook }: { sheetId: string; workbook: 
         Save money in
       </Button>
       <ErrorNote message={error} />
-      <SuccessNote message={saved} />
+      {saved && <SavedNote key={saved.ref.id} saved={saved} amountId="in-amount" onClear={() => setSaved(null)} />}
     </form>
   )
 }

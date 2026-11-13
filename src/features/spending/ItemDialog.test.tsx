@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveCheckCount, saveExpense, saveLine, voidBalanceCheck, voidEntry, voidExpense, voidLine } from '../../data/actions'
+import { saveCheckCount, saveEntry, saveExpense, saveLine, voidBalanceCheck, voidEntry, voidExpense, voidLine } from '../../data/actions'
 import { parseWorkbook } from '../../data/workbook'
 import type { Workbook } from '../../domain/types'
 import { SessionProvider } from '../../state/session'
@@ -19,6 +19,7 @@ vi.mock('../../data/actions', async (original) => ({
   saveCheckCount: vi.fn(async () => {}),
   voidBalanceCheck: vi.fn(async () => {}),
   voidEntry: vi.fn(async () => {}),
+  saveEntry: vi.fn(async () => {}),
 }))
 
 vi.mock('../../google/auth', async (original) => ({
@@ -154,13 +155,14 @@ describe('Spending: correct or void', () => {
     expect(voidBalanceCheck).toHaveBeenCalledWith('s', expect.anything(), check, 'Entered by mistake', 'tok')
   })
 
-  it('shows a move with where to change it, and voids it when entered twice', async () => {
+  it('shows a move, and voids it when entered twice', async () => {
     renderSpending()
     await openItem(/^Piggy Bank → Cash ₱100.00: details/)
     expect(dialog()).toHaveAccessibleName('Move')
     expect(dialog()).toHaveTextContent('FromPiggy Bank')
     expect(dialog()).toHaveTextContent('ToCash')
-    expect(dialog()).toHaveTextContent('Not spending. To change it, edit the Transfers tab of the sheet.')
+    expect(dialog()).toHaveTextContent('Not spending.')
+    expect(dialog()).not.toHaveTextContent('tab of the sheet')
     await voidWith('move', 'Entered twice')
     expect(await screen.findByText('Voided Piggy Bank → Cash (entered twice).')).toBeInTheDocument()
     expect(voidEntry).toHaveBeenCalledWith('s', expect.anything(), { tab: 'Transfers', id: 'tr2', row: 3 }, 'Entered twice', 'tok')
@@ -174,6 +176,48 @@ describe('Spending: correct or void', () => {
     await openItem(/^Beta payment ₱1,200.00: details/)
     await voidWith('card payment', 'Entered by mistake')
     expect(voidEntry).toHaveBeenCalledWith('s', expect.anything(), { tab: 'Payments', id: 'p3', row: 4 }, 'Entered by mistake', 'tok')
+  })
+
+  it('corrects a move: amount, date, from, to, and note', async () => {
+    renderSpending()
+    await openItem(/^Piggy Bank → Cash ₱100.00: details/)
+    const amount = inDialog().getByLabelText('Amount (₱)')
+    await userEvent.clear(amount)
+    await userEvent.type(amount, '150')
+    await userEvent.selectOptions(inDialog().getByLabelText('From'), 'payroll')
+    await userEvent.type(inDialog().getByLabelText('Note'), 'ATM')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(await screen.findByText('Corrected Piggy Bank → Cash.')).toBeInTheDocument()
+    expect(saveEntry).toHaveBeenCalledWith(
+      's',
+      expect.anything(),
+      { tab: 'Transfers', id: 'tr2', row: 3 },
+      { date: '2030-01-16', amount: 15000, fromAccount: 'payroll', toAccount: 'cash', note: 'ATM' },
+      'tok',
+    )
+  })
+
+  it('does not save a move to the same account', async () => {
+    renderSpending()
+    await openItem(/^Piggy Bank → Cash ₱100.00: details/)
+    await userEvent.selectOptions(inDialog().getByLabelText('To'), 'piggy')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(inDialog().getByText('Choose two different accounts.')).toBeInTheDocument()
+    expect(saveEntry).not.toHaveBeenCalled()
+  })
+
+  it('corrects money in (Received in) and a card payment (Paid from)', async () => {
+    renderSpending()
+    await openItem(/^Salary ₱20,000.00: details/)
+    expect(inDialog().queryByLabelText('From')).not.toBeInTheDocument()
+    await userEvent.selectOptions(inDialog().getByLabelText('Received in'), 'cash')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(saveEntry).toHaveBeenLastCalledWith('s', expect.anything(), { tab: 'IncomeLog', id: 'i1', row: 2 }, expect.objectContaining({ toAccount: 'cash', amount: 2000000 }), 'tok')
+    await openItem(/^Beta payment ₱1,200.00: details/)
+    expect(inDialog().queryByLabelText('Note')).not.toBeInTheDocument()
+    await userEvent.selectOptions(inDialog().getByLabelText('Paid from'), 'piggy')
+    await userEvent.click(inDialog().getByRole('button', { name: 'Save correction' }))
+    expect(saveEntry).toHaveBeenLastCalledWith('s', expect.anything(), { tab: 'Payments', id: 'p3', row: 4 }, expect.objectContaining({ fromAccount: 'piggy', amount: 120000 }), 'tok')
   })
 
   it('waits for a move that is not in the sheet yet', async () => {

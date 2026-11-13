@@ -7,8 +7,9 @@ import type { Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
-import { AmountInput, Chips, Field, SuccessNote, TextInput } from '../../ui/form'
+import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from './parseAmount'
+import { SavedNote, type Saved } from './SavedNote'
 
 const LAST_METHOD_KEY = 'debt-app.last-paid-from'
 
@@ -25,7 +26,7 @@ export function ExpenseForm({ sheetId, workbook }: { sheetId: string; workbook: 
   const [date, setDate] = useState(todayIso())
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [saved, setSaved] = useState<Saved | null>(null)
 
   const merchants = useMemo(() => [...new Set(workbook.transactions.map((t) => t.merchant).filter(Boolean))].slice(-50), [workbook.transactions])
   const card = cardForMethod(workbook, methodId)
@@ -37,9 +38,9 @@ export function ExpenseForm({ sheetId, workbook }: { sheetId: string; workbook: 
     const cents = parsePositiveAmount(amount)
     if (cents === null) return setError('Enter an amount more than 0.')
     setError(null)
-    addExpense(sheetId, { date, amount: cents, merchant: merchant.trim(), category, methodId, note: note.trim() })
+    const txn = addExpense(sheetId, { date, amount: cents, merchant: merchant.trim(), category, methodId, note: note.trim() })
     localStorage.setItem(LAST_METHOD_KEY, methodId)
-    setSaved(`Saved ${formatPeso(cents)} · ${accountLabel(workbook, methodId)}${merchant.trim() ? ` · ${merchant.trim()}` : ''}.`)
+    setSaved({ message: `Saved ${formatPeso(cents)} · ${accountLabel(workbook, methodId)}${merchant.trim() ? ` · ${merchant.trim()}` : ''}.`, ref: { tab: 'Transactions', id: txn.txnId } })
     setAmount('')
     setMerchant('')
     setCategory(defaultCategory)
@@ -84,7 +85,7 @@ export function ExpenseForm({ sheetId, workbook }: { sheetId: string; workbook: 
         Save expense
       </Button>
       <ErrorNote message={error} />
-      <SuccessNote message={saved} />
+      {saved && <SavedNote key={saved.ref.id} saved={saved} amountId="exp-amount" onClear={() => setSaved(null)} />}
     </form>
   )
 }

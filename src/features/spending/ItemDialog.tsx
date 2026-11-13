@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { saveCheckCount, saveExpense, saveLine, VOID_REASONS, voidBalanceCheck, voidEntry, voidExpense, voidLine, type VoidReason } from '../../data/actions'
-import type { EntryRef } from '../../domain/activity'
-import { accountLabel, expenseCategories, paidFromAccounts } from '../../domain/accounts'
+import { saveCheckCount, saveEntry, saveExpense, saveLine, VOID_REASONS, voidBalanceCheck, voidEntry, voidExpense, voidLine, type VoidReason } from '../../data/actions'
+import type { Entry, EntryRef } from '../../domain/activity'
+import { accountLabel, expenseCategories, moneyAccounts, paidFromAccounts } from '../../domain/accounts'
 import { type SpendingItem } from '../../domain/reconcile'
 import type { StatementLine, Transaction, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
@@ -72,22 +72,79 @@ function VoidBox({ what, edit, onVoid, children }: { what: string; edit: SheetEd
 
 const ENTRY_WHAT: Record<EntryRef['tab'], string> = { Transfers: 'move', IncomeLog: 'money in', Payments: 'card payment' }
 
-/** Void a move, money in, or card payment (e.g. entered twice). */
-export function EntryVoid({ entry, label, onSaved }: { entry: EntryRef; label: string; onSaved: Saved }) {
+/** Account choices, with the current one kept even when it is closed. */
+function AccountSelect({ workbook, id, label, current, value, onChange }: { workbook: Workbook; id: string; label: string; current: string; value: string; onChange: (v: string) => void }) {
+  const accounts = moneyAccounts(workbook).filter((a) => a.active)
+  return (
+    <Field label={label} htmlFor={id}>
+      <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {!accounts.some((a) => a.accountId === current) && <option value={current}>{accountLabel(workbook, current)}</option>}
+        {accounts.map((a) => (
+          <option key={a.accountId} value={a.accountId}>
+            {a.label}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  )
+}
+
+/**
+ * Correct a move (amount, date, from, to, note), money in (amount, date, Received in, note), or card payment
+ * (amount, date, Paid from), or void it (e.g. entered twice).
+ */
+export function EntryCorrection({ workbook, entry, onSaved }: { workbook: Workbook; entry: Entry; onSaved: Saved }) {
   const edit = useSheetEdit()
-  if (!entry.row) return waiting
-  const what = ENTRY_WHAT[entry.tab]
+  const ref = entry.ref!
+  const [amount, setAmount] = useState(toPesos(entry.amount).toFixed(2))
+  const [date, setDate] = useState(entry.date)
+  const [from, setFrom] = useState(entry.from)
+  const [to, setTo] = useState(entry.to)
+  const [note, setNote] = useState(entry.note)
+  if (!ref.row) return waiting
+  const what = ENTRY_WHAT[ref.tab]
+
+  async function save() {
+    const cents = parsePositiveAmount(amount)
+    if (cents === null) return edit.fail('Enter an amount more than 0.')
+    if (ref.tab === 'Transfers' && from === to) return edit.fail('Choose two different accounts.')
+    const message = `Corrected ${entry.label}.`
+    const ok = await edit.run(message, (sheetId, wb, token) => saveEntry(sheetId, wb, ref, { date, amount: cents, fromAccount: from, toAccount: to, note: note.trim() }, token))
+    if (ok) onSaved(message)
+  }
 
   async function voidIt(reason: VoidReason) {
-    const message = `Voided ${label} (${reason.toLowerCase()}).`
-    if (await edit.run(message, (sheetId, wb, token) => voidEntry(sheetId, wb, entry, reason, token))) onSaved(message)
+    const message = `Voided ${entry.label} (${reason.toLowerCase()}).`
+    if (await edit.run(message, (sheetId, wb, token) => voidEntry(sheetId, wb, ref, reason, token))) onSaved(message)
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Amount (₱)" htmlFor="fix-entry-amount">
+          <TextInput id="fix-entry-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Date" htmlFor="fix-entry-date">
+          <TextInput id="fix-entry-date" type="date" value={date} onChange={(e) => setDate(e.target.value || entry.date)} />
+        </Field>
+      </div>
+      {ref.tab !== 'IncomeLog' && (
+        <AccountSelect workbook={workbook} id="fix-entry-from" label={ref.tab === 'Payments' ? 'Paid from' : 'From'} current={entry.from} value={from} onChange={setFrom} />
+      )}
+      {ref.tab !== 'Payments' && (
+        <AccountSelect workbook={workbook} id="fix-entry-to" label={ref.tab === 'IncomeLog' ? 'Received in' : 'To'} current={entry.to} value={to} onChange={setTo} />
+      )}
+      {ref.tab !== 'Payments' && (
+        <Field label="Note" htmlFor="fix-entry-note">
+          <TextInput id="fix-entry-note" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+      )}
+      <Button className="w-full" disabled={edit.busy} onClick={() => void save()}>
+        {edit.busy ? 'Saving…' : 'Save correction'}
+      </Button>
       <VoidBox what={what} edit={edit} onVoid={(r) => void voidIt(r)}>
-        {entry.tab === 'Transfers' && <p>Both balances go back as if it did not happen.</p>}
-        {entry.tab === 'Payments' && <p>The card shows this amount as not paid again.</p>}
+        {ref.tab === 'Transfers' && <p>Both balances go back as if it did not happen.</p>}
+        {ref.tab === 'Payments' && <p>The card shows this amount as not paid again.</p>}
       </VoidBox>
       <ErrorNote message={edit.error} />
     </div>

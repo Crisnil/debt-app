@@ -1,3 +1,4 @@
+import type { EntryRef } from '../domain/activity'
 import type { BalanceCheck, IncomeEntry, IncomeSource, IncomeType, IsoDate, LineType, Payable, PayableAmount, Payment, PlannedExpense, StatementLine, Transaction, Transfer, Workbook } from '../domain/types'
 import { addTabs, appendRows, getTabValues, quoteTab, updateCells, type CellValue } from '../google/sheetsApi'
 import { newId } from '../lib/ids'
@@ -265,6 +266,8 @@ export async function saveExpense(sheetId: string, wb: Workbook, txn: Transactio
   )
 }
 
+const ID_COLUMN = { Transactions: 'txn_id', Transfers: 'transfer_id', IncomeLog: 'income_id', Payments: 'pay_id' } as const
+
 export const VOID_REASONS = ['Entered twice', 'Did not happen', 'Entered by mistake'] as const
 export type VoidReason = (typeof VOID_REASONS)[number]
 
@@ -320,13 +323,51 @@ export async function voidLine(sheetId: string, wb: Workbook, line: StatementLin
 export async function voidEntry(
   sheetId: string,
   wb: Workbook,
-  entry: { tab: 'Transfers' | 'IncomeLog' | 'Payments'; id: string; row?: number },
+  entry: EntryRef,
   reason: VoidReason,
   token: string,
 ) {
-  const idColumn = { Transfers: 'transfer_id', IncomeLog: 'income_id', Payments: 'pay_id' }[entry.tab]
   const cells = voidCells(wb, entry.tab, entry.row ?? 0, reason)
-  await checkRow(sheetId, entry.tab, idColumn, entry.row, entry.id, token)
+  await checkRow(sheetId, entry.tab, ID_COLUMN[entry.tab], entry.row, entry.id, token)
+  await updateCells(sheetId, cells, token)
+}
+
+export type EntryEdit = { date: IsoDate; amount: Centavos; fromAccount: string; toAccount: string; note: string }
+
+/**
+ * Corrects a move, money in, or card payment in its row. A move changes date, amount, from, to, and note; money in
+ * changes date, amount, to (Received in), and note; a card payment changes date, amount, and from (Paid from).
+ */
+export async function saveEntry(sheetId: string, wb: Workbook, entry: EntryRef, edit: EntryEdit, token: string) {
+  const { tab } = entry
+  await checkRow(sheetId, tab, ID_COLUMN[tab], entry.row, entry.id, token)
+  const h = wb.headers[tab]
+  const cell = (column: string, value: CellValue) => ({ range: cellRange(tab, h, column, entry.row!), values: [[value]] })
+  const cells = [cell('date', edit.date), cell('amount', pesos(edit.amount))]
+  if (tab !== 'IncomeLog') cells.push(cell('from_account', edit.fromAccount))
+  if (tab !== 'Payments') cells.push(cell('to_account', edit.toAccount), cell('note', safeText(edit.note)))
+  await updateCells(sheetId, cells, token)
+}
+
+/** An entry just added on the Add page, to undo it. */
+export type UndoRef = { tab: 'Transactions' | EntryRef['tab']; id: string }
+
+/**
+ * Undo of an entry that is already in the sheet: voids it ("Entered by mistake"). Its row comes from the sheet as
+ * loaded; when it is not there yet, try again after the reload.
+ */
+export async function undoEntry(sheetId: string, wb: Workbook, ref: UndoRef, token: string) {
+  const row =
+    ref.tab === 'Transactions'
+      ? wb.transactions.find((t) => t.txnId === ref.id)?.row
+      : ref.tab === 'Transfers'
+        ? wb.transfers.find((t) => t.transferId === ref.id)?.row
+        : ref.tab === 'IncomeLog'
+          ? wb.incomeLog.find((i) => i.incomeId === ref.id)?.row
+          : wb.payments.find((p) => p.payId === ref.id)?.row
+  if (!row) throw new Error('Still sending to the sheet. Try Undo again in a moment.')
+  const cells = voidCells(wb, ref.tab, row, 'Entered by mistake')
+  await checkRow(sheetId, ref.tab, ID_COLUMN[ref.tab], row, ref.id, token)
   await updateCells(sheetId, cells, token)
 }
 
