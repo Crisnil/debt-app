@@ -3,7 +3,7 @@ import { addExpense, addPayable, savePayable, setPayableAmount } from '../../dat
 import { cardForMethod, expenseCategories } from '../../domain/accounts'
 import { billFor } from '../../domain/billing'
 import { todayIso } from '../../domain/dues'
-import { monthsToKeep, PAYABLE_CATEGORIES, type PayableMonth } from '../../domain/payables'
+import { canChargeToCard, monthsToKeep, PAYABLE_CATEGORIES, type PayableMonth } from '../../domain/payables'
 import type { Workbook } from '../../domain/types'
 import { toPesos } from '../../lib/money'
 import { useSheetEdit } from '../../state/hooks'
@@ -11,6 +11,29 @@ import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { AmountInput, Chips, Field, TextInput } from '../../ui/form'
 import { parsePositiveAmount } from '../add/parseAmount'
+
+const YOURSELF = ''
+
+/** How a bill is paid: by you (the default), or charged to a card automatically, like a subscription. */
+function PaidHow({ workbook, value, onChange }: { workbook: Workbook; value: string; onChange: (cardId: string) => void }) {
+  const cards = workbook.cards.filter((c) => c.active || c.cardId === value)
+  if (!canChargeToCard(workbook) || cards.length === 0) return null
+  return (
+    <>
+      <Chips
+        label="How it is paid"
+        options={[{ value: YOURSELF, label: 'I pay it' }, ...cards.map((c) => ({ value: c.cardId, label: `Charged to ${c.name}` }))]}
+        value={value}
+        onChange={onChange}
+      />
+      {value && (
+        <p className="text-xs text-slate-600">
+          It is on the card&apos;s bill, so the app does not count it again as a bill to pay. Use the name on the statement (e.g. NETFLIX) to find the charge.
+        </p>
+      )}
+    </>
+  )
+}
 
 /** Pay one month of a payable. Saved as an expense linked to the payable. A card payment shows on that card's bill. */
 export function PayForm({ sheetId, workbook, item, onDone }: { sheetId: string; workbook: Workbook; item: PayableMonth; onDone: (message?: string) => void }) {
@@ -82,6 +105,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
   const [monthAmount, setMonthAmount] = useState(toPesos(item.amount).toFixed(2))
   const [dueDay, setDueDay] = useState(p.dueDay?.toString() ?? '')
   const [times, setTimes] = useState(p.times?.toString() ?? '')
+  const [cardId, setCardId] = useState(p.cardId)
   const id = `${p.payableId}-${item.month}`
 
   async function save(e: FormEvent) {
@@ -97,7 +121,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
     const message = `Saved ${name.trim()}.`
     const ok = await edit.run(message, async (sheetId, wb, token) => {
       if (usual !== p.amount) for (const keep of monthsToKeep(workbook, p, todayIso())) setPayableAmount(sheetId, p.payableId, keep.month, keep.amount)
-      await savePayable(sheetId, wb, p.row, { name: name.trim(), payee: payee.trim(), category, amount: usual, dueDay: day, times: count }, token)
+      await savePayable(sheetId, wb, p.row, { name: name.trim(), payee: payee.trim(), category, amount: usual, dueDay: day, times: count, cardId }, token)
       // This month's amount after the save would be the one set before, or else the new usual amount.
       const wouldBe = item.amountSet ? item.amount : usual
       if (showMonth && forMonth !== wouldBe) setPayableAmount(sheetId, p.payableId, item.month, forMonth)
@@ -111,11 +135,12 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
         <Field label="Name" htmlFor={`ed-name-${id}`}>
           <TextInput id={`ed-name-${id}`} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Pay to" htmlFor={`ed-payee-${id}`}>
+        <Field label={cardId ? 'Name on the statement' : 'Pay to'} htmlFor={`ed-payee-${id}`}>
           <TextInput id={`ed-payee-${id}`} value={payee} onChange={(e) => setPayee(e.target.value)} />
         </Field>
       </div>
       <Chips label="Category" options={categories.map((c) => ({ value: c, label: c }))} value={category} onChange={setCategory} />
+      {p.recurring && <PaidHow workbook={workbook} value={cardId} onChange={setCardId} />}
       <div className="grid grid-cols-2 gap-2">
         <Field label={p.recurring ? 'Usual amount (₱)' : 'Amount (₱)'} htmlFor={`ed-amount-${id}`}>
           <TextInput id={`ed-amount-${id}`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -127,7 +152,7 @@ export function EditPayableForm({ workbook, item, onDone }: { workbook: Workbook
         )}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Due day" htmlFor={`ed-day-${id}`} hint="Empty = end of month">
+        <Field label={cardId ? 'Day it is charged' : 'Due day'} htmlFor={`ed-day-${id}`} hint="Empty = end of month">
           <TextInput id={`ed-day-${id}`} inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
         </Field>
         {p.recurring && (
@@ -164,7 +189,9 @@ export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string
   const [times, setTimes] = useState('')
   const [dueDate, setDueDate] = useState(todayIso())
   const [note, setNote] = useState('')
+  const [cardId, setCardId] = useState(YOURSELF)
   const [error, setError] = useState<string | null>(null)
+  const onCard = recurring && cardId !== YOURSELF
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -178,7 +205,7 @@ export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string
     const start = recurring ? startMonth : dueDate.slice(0, 7)
     if (!/^\d{4}-\d{2}$/.test(start)) return setError(recurring ? 'Enter the first month.' : 'Enter the due date.')
     setError(null)
-    addPayable(sheetId, { name: name.trim(), payee: payee.trim(), category, amount: cents, recurring, dueDay: day, startMonth: start, times: count, note: note.trim() })
+    addPayable(sheetId, { name: name.trim(), payee: payee.trim(), category, amount: cents, recurring, dueDay: day, startMonth: start, times: count, note: note.trim(), cardId: onCard ? cardId : '' })
     onSaved(`Added ${name.trim()}.`)
   }
 
@@ -188,8 +215,8 @@ export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string
         <Field label="Name" htmlFor="pb-name">
           <TextInput id="pb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Electric" />
         </Field>
-        <Field label="Pay to (optional)" htmlFor="pb-payee">
-          <TextInput id="pb-payee" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="e.g. NORECO, Tita" />
+        <Field label={onCard ? 'Name on the statement' : 'Pay to (optional)'} htmlFor="pb-payee">
+          <TextInput id="pb-payee" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder={onCard ? 'e.g. NETFLIX' : 'e.g. NORECO, Tita'} />
         </Field>
       </div>
       <Field label={recurring ? 'Usual amount per month (₱)' : 'Amount (₱)'} htmlFor="pb-amount">
@@ -205,13 +232,14 @@ export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string
         value={recurring ? 'monthly' : 'once'}
         onChange={(v) => setRecurring(v === 'monthly')}
       />
+      {recurring && <PaidHow workbook={workbook} value={cardId} onChange={setCardId} />}
       {recurring ? (
         <>
           <Field label="First month" htmlFor="pb-start">
             <TextInput id="pb-start" type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Due day" htmlFor="pb-day" hint="Empty = end of month">
+            <Field label={onCard ? 'Day it is charged' : 'Due day'} htmlFor="pb-day" hint="Empty = end of month">
               <TextInput id="pb-day" inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value)} placeholder="20" />
             </Field>
             <Field label="How many times" htmlFor="pb-times" hint="Empty = no end">

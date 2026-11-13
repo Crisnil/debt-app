@@ -29,6 +29,7 @@ const payable = (over: Partial<Payable>): Payable => ({
   times: null,
   active: true,
   note: '',
+  cardId: '',
   row: 2,
   ...over,
 })

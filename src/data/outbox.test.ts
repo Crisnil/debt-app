@@ -71,7 +71,7 @@ describe('outbox', () => {
   })
 
   it('queues payables, month amounts, and payments with the month kept as text', () => {
-    const p = addPayable(SHEET, { name: 'Sample bill', payee: '', category: 'Utilities', amount: 180000, recurring: true, dueDay: 20, startMonth: '2030-01', times: null, note: '' })
+    const p = addPayable(SHEET, { name: 'Sample bill', payee: '', category: 'Utilities', amount: 180000, recurring: true, dueDay: 20, startMonth: '2030-01', times: null, note: '', cardId: '' })
     setPayableAmount(SHEET, p.payableId, '2030-01', 214000)
     addExpense(SHEET, { date: '2030-01-18', amount: 214000, merchant: 'Sample', category: 'Utilities', methodId: 'cash', note: '', payableId: p.payableId, payableMonth: '2030-01' })
     const items = readOutbox(SHEET)

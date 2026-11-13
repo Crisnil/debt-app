@@ -105,6 +105,8 @@ export type Payable = {
   times: number | null
   active: boolean
   note: string
+  /** The card it is charged to automatically (a subscription), from Payables.card_id. '' when you pay it yourself. */
+  cardId: string
   row: number
 }
 

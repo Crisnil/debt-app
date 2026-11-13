@@ -56,7 +56,7 @@ describe('gauges', () => {
   })
 
   it('uses the Plan when it has lines: bills in full after their due day, other lines spread over the month', () => {
-    const electric: Payable = { payableId: 'el', name: 'Electric', payee: '', category: 'Utilities', amount: 300000, recurring: true, dueDay: 15, startMonth: '2030-01', times: null, active: true, note: '', row: 2 }
+    const electric: Payable = { payableId: 'el', name: 'Electric', payee: '', category: 'Utilities', amount: 300000, recurring: true, dueDay: 15, startMonth: '2030-01', times: null, active: true, note: '', cardId: '', row: 2 }
     const line = (itemId: string, amount: number, payableId = ''): PlannedExpense => ({ itemId, name: itemId, amount, active: true, payableId, row: 0 })
     const wb: Workbook = { ...base, payables: [electric], plannedExpenses: [line('Grocery', 3100000), line('Electric', 300000, 'el')] }
     // Jan 10: grocery 31,000 × 10/31 = 10,000; electric (due the 15th) not yet.
