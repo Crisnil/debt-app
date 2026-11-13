@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { byGroup, TYPE_LABEL } from '../../domain/accounts'
 import { accountsToCheck } from '../../domain/balances'
@@ -7,12 +7,11 @@ import { moneyParts, moneyTotals, type MoneyPart } from '../../domain/home'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import type { RefreshState } from '../../state/hooks'
+import { Swipe, swipeCard as card } from '../../ui/Swipe'
 
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 const timeOf = (date: Date) => date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
 
-// Phone: a swipe row, one card at a time with the next one peeking. Wide: a grid of all cards.
-const card = 'relative flex w-[85%] shrink-0 snap-start flex-col rounded-2xl p-4 shadow-sm sm:w-72 lg:w-auto'
 // Makes the whole card open its link; buttons inside the card sit above it (relative z-10).
 const stretched = 'after:absolute after:inset-0 after:rounded-2xl after:content-[""]'
 
@@ -63,15 +62,13 @@ function AccountCard({ workbook, part }: { workbook: Workbook; part: MoneyPart }
   )
 }
 
-/** A credit card: owed against the limit and the next bill. Tap: the card's page. */
-function CreditCard({ forecast, today }: { forecast: CardForecast; today: IsoDate }) {
+/** What a credit card shows: owed, share of the limit, and the next bill. `name` is the card's link or button. */
+export function CreditCardFace({ forecast, today, name }: { forecast: CardForecast; today: IsoDate; name: ReactNode }) {
   const { card: c, owed, used } = forecast
   const next = forecast.bills.find((b) => b.total > 0)
   return (
-    <li className={`${card} bg-slate-800 text-white`}>
-      <Link to={`/cards/${c.cardId}`} className={`${stretched} text-sm text-slate-300`}>
-        <span className="font-medium text-white">{c.name}</span> · Credit
-      </Link>
+    <>
+      {name}
       <p className="mt-1 text-2xl font-semibold">{formatPeso(owed)}</p>
       <p className="text-xs text-slate-300">
         {used === null || c.creditLimit === null ? 'owed' : `owed · ${Math.round(used * 100)}% of ${formatPeso(c.creditLimit)} limit`}
@@ -79,6 +76,26 @@ function CreditCard({ forecast, today }: { forecast: CardForecast; today: IsoDat
       <p className="mt-auto pt-3 text-xs text-slate-300">
         {next ? `${next.bill.dueDate < today ? '▲ Was due' : 'Due'} ${shortDate(next.bill.dueDate)} · ${formatPeso(next.total)}` : 'Nothing due ✓'}
       </p>
+    </>
+  )
+}
+
+export const creditCardStyle = `${card} bg-slate-800 text-white`
+
+/** A credit card on Home. Tap: the card's page. */
+function CreditCard({ forecast, today }: { forecast: CardForecast; today: IsoDate }) {
+  const c = forecast.card
+  return (
+    <li className={creditCardStyle}>
+      <CreditCardFace
+        forecast={forecast}
+        today={today}
+        name={
+          <Link to={`/cards/${c.cardId}`} className={`${stretched} text-sm text-slate-300`}>
+            <span className="font-medium text-white">{c.name}</span> · Credit
+          </Link>
+        }
+      />
     </li>
   )
 }
@@ -88,8 +105,6 @@ function CreditCard({ forecast, today }: { forecast: CardForecast; today: IsoDat
  * Phone: swipe through them. Wide screens: a grid.
  */
 export function HeroCards({ workbook, forecasts, today, refresh }: { workbook: Workbook; forecasts: CardForecast[]; today: IsoDate; refresh?: RefreshState }) {
-  const row = useRef<HTMLUListElement>(null)
-  const [active, setActive] = useState(0)
   const order = workbook.accounts.map((a) => a.accountId)
   const parts = byGroup(
     moneyParts(workbook).sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)),
@@ -100,24 +115,9 @@ export function HeroCards({ workbook, forecasts, today, refresh }: { workbook: W
   const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
   const unchecked = canCheck ? accountsToCheck(workbook, today.slice(0, 7)) : []
 
-  // The card nearest the left edge is the one shown.
-  function onScroll() {
-    const el = row.current
-    if (!el) return
-    const items = [...el.children] as HTMLElement[]
-    const left = el.scrollLeft + items[0].offsetLeft
-    setActive(items.reduce((best, item, i) => (Math.abs(item.offsetLeft - left) < Math.abs(items[best].offsetLeft - left) ? i : best), 0))
-  }
-
   return (
     <div>
-      <h2 className="sr-only">Accounts and cards</h2>
-      <ul
-        ref={row}
-        onScroll={onScroll}
-        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0 xl:grid-cols-4"
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
+      <Swipe label="Accounts and cards" count={count}>
         <SummaryCard parts={parts} refresh={refresh} />
         {parts.map((p) => (
           <AccountCard key={p.id} workbook={workbook} part={p} />
@@ -125,14 +125,7 @@ export function HeroCards({ workbook, forecasts, today, refresh }: { workbook: W
         {cards.map((f) => (
           <CreditCard key={f.card.cardId} forecast={f} today={today} />
         ))}
-      </ul>
-      {count > 1 && (
-        <p className="mt-2 flex justify-center gap-1.5 lg:hidden" aria-hidden="true">
-          {Array.from({ length: count }, (_, i) => (
-            <span key={i} className={`h-1.5 rounded-full ${i === active ? 'w-4 bg-green-900' : 'w-1.5 bg-slate-300'}`} />
-          ))}
-        </p>
-      )}
+      </Swipe>
       {parts.some((p) => p.amount < 0) && <p className="mt-2 text-xs text-amber-900">! An account shows less than ₱0. Check its starting balance in Settings.</p>}
       {unchecked.length > 0 && (
         <p className="mt-2 text-sm text-slate-700">

@@ -3,13 +3,12 @@ import { AddPage } from './features/add/AddPage'
 import { BalancesPage } from './features/balances/BalancesPage'
 import { OtherEntriesPage } from './features/add/OtherEntriesPage'
 import { CardPage } from './features/cards/CardPage'
-import { CardsPage } from './features/cards/CardsPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { BillsPage } from './features/bills/BillsPage'
 import { MorePage } from './features/MorePage'
-import { PlanPage } from './features/plan/PlanPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SpendingPage } from './features/spending/SpendingPage'
+import { StatsPage } from './features/stats/StatsPage'
 import { useEffect } from 'react'
 import { todayIso } from './domain/dues'
 import { forecastCards } from './domain/forecast'
@@ -67,13 +66,14 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/add" element={<AddPage />} />
             <Route path="/add/other" element={<OtherEntriesPage />} />
-            <Route path="/cards" element={<CardsPage />} />
+            <Route path="/stats" element={<StatsPage />} />
+            <Route path="/cards" element={<Navigate to="/stats?tab=cards" replace />} />
             <Route path="/cards/:cardId" element={<CardPage />} />
             <Route path="/reconcile/:cardId" element={<ReconcileRedirect />} />
             <Route path="/bills" element={<BillsPage />} />
             <Route path="/transactions" element={<SpendingPage />} />
             <Route path="/spending" element={<Navigate to="/transactions" replace />} />
-            <Route path="/plan" element={<PlanPage />} />
+            <Route path="/plan" element={<Navigate to="/stats?tab=plan" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/balances" element={<BalancesPage />} />
             <Route path="/more" element={<MorePage />} />
