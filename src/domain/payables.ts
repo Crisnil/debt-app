@@ -94,11 +94,6 @@ export function payablesByMonth(wb: Workbook, first: string, months: number): Ma
   return result
 }
 
-/** Expenses that pay a payable from an e-wallet: the e-wallet load already counted this money as spending. */
-export function isEwalletPayablePayment(wb: Workbook, t: Transaction): boolean {
-  return Boolean(t.payableId) && wb.accounts.some((a) => a.accountId === t.methodId && a.type === 'e-wallet')
-}
-
 /** The Bills table: this month's payables, and earlier months still not paid (late) first. */
 export function billsThisMonth(wb: Workbook, today: IsoDate): PayableMonth[] {
   const month = today.slice(0, 7)

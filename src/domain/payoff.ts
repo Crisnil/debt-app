@@ -246,7 +246,7 @@ export type ActualLiving = {
   monthly: Centavos
   /** Usual card spending: average straight purchases on the last 3 statements of each card. */
   card: Centavos
-  /** Cash, bank, and e-wallet-load spending per month. null when there are not enough entries yet. */
+  /** Cash, bank, and e-wallet spending per month. null when there are not enough entries yet. */
   cash: Centavos | null
   /** What the cash part is based on: full months, or this month so far scaled to a full month. */
   cashBasis: { kind: 'months'; months: string[] } | { kind: 'partial'; from: IsoDate; to: IsoDate } | null
@@ -256,7 +256,7 @@ export type ActualLiving = {
  * Actual monthly living costs, from real data:
  * - cards: average straight purchases on the last 3 statements of each card (the statements cover card spending, so
  *   logged card expenses are not added again);
- * - cash, bank, and e-wallet loads (and bills paid that way): the average of the last 3 full months of entries, or,
+ * - cash, bank, and e-wallet expenses (and bills paid that way): the average of the last 3 full months of entries, or,
  *   before the first full month, this month so far scaled to a full month once there are 7 days of entries.
  * Payments of loans and one-time debts are left out: the path counts them as debt. null when there is no data at all.
  */

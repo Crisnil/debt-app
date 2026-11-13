@@ -12,12 +12,11 @@ import { parsePositiveAmount } from './parseAmount'
 const LAST_FROM_KEY = 'debt-app.last-move-from'
 
 /**
- * Money moved between two of your accounts, e.g. an ATM withdrawal (savings → Cash). Saved as a transfer: not spending.
- * Out of a savings account lowers saved this month; into one counts toward the savings goal.
+ * Money moved between two of your accounts, e.g. an ATM withdrawal (savings → Cash) or a GCash load. Saved as a
+ * transfer: not spending. Out of a savings account lowers saved this month; into one counts toward the savings goal.
  */
 export function MoveMoneyForm({ sheetId, workbook }: { sheetId: string; workbook: Workbook }) {
-  // Not e-wallets: a load is an expense, and money back from an e-wallet is a cash-out.
-  const accounts = moneyAccounts(workbook).filter((a) => a.active && a.type !== 'e-wallet')
+  const accounts = moneyAccounts(workbook).filter((a) => a.active)
   const has = (id: string | null | undefined) => accounts.some((a) => a.accountId === id)
   const cash = accounts.find((a) => a.type === 'cash')?.accountId
   const salaryAccount = workbook.incomeSources.find((s) => s.sourceId === 'salary')?.toAccount
@@ -37,13 +36,16 @@ export function MoveMoneyForm({ sheetId, workbook }: { sheetId: string; workbook
 
   const label = (id: string) => accounts.find((a) => a.accountId === id)?.label ?? id
   const isSavings = (id: string) => accounts.some((a) => a.accountId === id && a.isSavings)
+  const isWallet = (id: string) => accounts.some((a) => a.accountId === id && a.type === 'e-wallet')
   const cents = parsePositiveAmount(amount)
   const effect =
     isSavings(from) && !isSavings(to)
       ? `Lowers saved this month${cents ? ` by ${formatPeso(cents)}` : ''}. Not spending.`
       : isSavings(to) && !isSavings(from)
         ? 'Counts toward your savings goal. Not spending.'
-        : 'Not spending. Log what you buy with it as expenses.'
+        : isWallet(to)
+          ? `Not spending. Log what you buy with ${label(to)} as expenses paid from ${label(to)}.`
+          : 'Not spending. Log what you buy with it as expenses.'
 
   function chooseFrom(id: string) {
     setFrom(id)
@@ -65,7 +67,7 @@ export function MoveMoneyForm({ sheetId, workbook }: { sheetId: string; workbook
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <p className="text-sm text-slate-600">For an ATM withdrawal, or money between your accounts.</p>
+      <p className="text-sm text-slate-600">For an ATM withdrawal, an e-wallet load, or money between your accounts.</p>
       <Field label="Amount (₱)" htmlFor="mv-amount">
         <AmountInput id="mv-amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>

@@ -2,7 +2,6 @@ import { checkResults } from './balances'
 import { cardForMethod, EWALLET_LOAD } from './accounts'
 import { billFor } from './billing'
 import { daysBetween } from './dues'
-import { isEwalletPayablePayment } from './payables'
 import type { BalanceCheck, IsoDate, StatementLine, Transaction, Workbook } from './types'
 
 /** A statement line and an expense are the same purchase when the card and amount match and the dates are this close. */
@@ -120,7 +119,7 @@ export function reconcileCard(wb: Workbook, cardId: string): Reconciliation {
 /**
  * One purchase, one count. Card spending = every straight statement line (matched lines use the
  * expense's category) + logged card expenses not on any statement yet. Cash, bank, and e-wallet
- * expenses are always counted from the expense list. A cash-out from an e-wallet back to a bank lowers
+ * expenses are always counted from the expense list. An old cash-out from an e-wallet back to a bank lowers
  * "E-wallet load" spending (negative amount).
  */
 export type SpendingItem = {
@@ -155,8 +154,6 @@ export function spendingItems(wb: Workbook): SpendingItem[] {
   }
   for (const t of wb.transactions) {
     if (cardForMethod(wb, t.methodId)) continue
-    // Paying a bill from GCash or Maya: the e-wallet load already counted this money.
-    if (isEwalletPayablePayment(wb, t)) continue
     items.push({ date: t.date, amount: t.amount, category: t.category, label: t.merchant, methodId: t.methodId, source: 'expense', txn: t })
   }
   for (const i of wb.incomeLog) {

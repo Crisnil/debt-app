@@ -50,7 +50,7 @@ export type CheckResult = {
   expected: Centavos
   /** Real − expected. Below 0: money went out that was not recorded. */
   difference: Centavos
-  /** The part counted as "Not recorded" spending: a drop, when counted, not for e-wallets. */
+  /** The part counted as "Not recorded" spending: a drop, when counted. */
   notRecorded: Centavos
 }
 
@@ -63,8 +63,7 @@ export function checkResults(wb: Workbook): CheckResult[] {
     for (const check of checksFor(wb, account)) {
       const expected = start + moved(wb, account.accountId, from, check.date)
       const difference = check.balance - expected
-      // E-wallet purchases are not logged (the load is the expense), so an e-wallet is always lower than expected.
-      const counts = check.countDifference && account.type !== 'e-wallet' && difference < 0
+      const counts = check.countDifference && difference < 0
       results.push({ check, account, expected, difference, notRecorded: counts ? -difference : 0 })
       start = check.balance
       from = check.date

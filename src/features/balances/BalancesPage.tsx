@@ -29,7 +29,6 @@ function describeResult(r: Pick<CheckResult, 'difference' | 'notRecorded' | 'acc
   const amount = formatPeso(Math.abs(r.difference))
   if (r.difference > 0) return `${amount} more than the app (interest or money in not recorded). Not counted as income or savings.`
   if (r.notRecorded > 0) return `${amount} less than the app: counted as Not recorded spending.`
-  if (r.account.type === 'e-wallet') return `${amount} less than the app: e-wallet purchases are not logged, so this is not counted.`
   return `${amount} less than the app. Not counted: new starting balance.`
 }
 
@@ -77,15 +76,13 @@ function AccountCheck({ sheetId, workbook, account, appBalance, date }: { sheetI
           Save
         </Button>
       </div>
-      {account.type !== 'e-wallet' && (
-        <label className="flex items-start gap-2 text-sm text-slate-700">
-          <input type="checkbox" className="mt-1" checked={count} onChange={(e) => setCount(e.target.checked)} />
-          <span>
-            Count a lower balance as Not recorded spending
-            {!hasChecks && <span className="block text-xs text-slate-500">Off for the first check: it replaces the starting balance.</span>}
-          </span>
-        </label>
-      )}
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input type="checkbox" className="mt-1" checked={count} onChange={(e) => setCount(e.target.checked)} />
+        <span>
+          Count a lower balance as Not recorded spending
+          {!hasChecks && <span className="block text-xs text-slate-500">Off for the first check: it replaces the starting balance.</span>}
+        </span>
+      </label>
       {preview && !saved && <p className="text-sm text-slate-600">{describeResult(preview)}</p>}
       <ErrorNote message={error} />
       <SuccessNote message={saved} />

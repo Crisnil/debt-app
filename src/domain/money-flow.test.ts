@@ -5,7 +5,7 @@ import { EWALLET_LOAD, expenseCategories, paidFromAccounts } from './accounts'
 import { accountBalances, savedInMonth, savingsGoal } from './balances'
 import { billFor, nextBill } from './billing'
 import { NO_MATCH, reconcileCard, spendingItems } from './reconcile'
-import type { StatementLine, Transaction, Workbook } from './types'
+import type { StatementLine, Transaction, Transfer, Workbook } from './types'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
 
@@ -138,18 +138,39 @@ describe('e-wallets', () => {
     ],
   }
 
-  it('leaves e-wallets out of "Paid from"', () => {
-    expect(paidFromAccounts(wb).map((a) => a.accountId)).toEqual(['payroll', 'piggy', 'cash', 'alpha', 'beta'])
+  const balance = (w: Workbook, id: string) => accountBalances(w).find((b) => b.account.accountId === id)!.balance
+
+  it('offers e-wallets in "Paid from"', () => {
+    expect(paidFromAccounts(wb).map((a) => a.accountId)).toEqual(['payroll', 'piggy', 'cash', 'alpha', 'beta', 'gcash'])
   })
 
-  it('always offers the e-wallet load category', () => {
-    expect(expenseCategories(wb)).toEqual(['Grocery', 'Gasoline', 'Food', EWALLET_LOAD])
+  it('offers only the categories of the Categories tab', () => {
+    expect(expenseCategories(wb)).toEqual(['Grocery', 'Gasoline', 'Food'])
   })
 
-  it('counts a cash-out as less e-wallet spending and adds it to the bank balance', () => {
+  it('still counts an old cash-out as less e-wallet spending and adds it to the bank balance', () => {
     expect(spendingItems(wb).find((i) => i.category === EWALLET_LOAD)).toMatchObject({ amount: -20000, date: '2030-01-20' })
-    const before = accountBalances(base).find((b) => b.account.accountId === 'payroll')!.balance
-    expect(accountBalances(wb).find((b) => b.account.accountId === 'payroll')!.balance).toBe(before + 20000)
+    expect(balance(wb, 'payroll')).toBe(balance(base, 'payroll') + 20000)
+  })
+
+  it('a load is a transfer: not spending, and it adds to the e-wallet balance', () => {
+    const load: Transfer = { transferId: 'load', date: '2030-01-21', fromAccount: 'payroll', toAccount: 'gcash', amount: 30000, note: '' }
+    const loaded: Workbook = { ...wb, transfers: [...wb.transfers, load] }
+    expect(spendingItems(loaded)).toEqual(spendingItems(wb))
+    expect(balance(loaded, 'gcash')).toBe(balance(wb, 'gcash') + 30000)
+    expect(balance(loaded, 'payroll')).toBe(balance(wb, 'payroll') - 30000)
+  })
+
+  it('counts an expense paid from an e-wallet as spending and takes it from the e-wallet balance', () => {
+    const txn = { ...base.transactions[0], txnId: 'gc1', date: '2030-01-22', amount: 12000, merchant: 'Jollibee', category: 'Food', methodId: 'gcash', payableId: '', payableMonth: '' }
+    const spent: Workbook = { ...wb, transactions: [...wb.transactions, txn] }
+    expect(spendingItems(spent).find((i) => i.txn?.txnId === 'gc1')).toMatchObject({ amount: 12000, category: 'Food', methodId: 'gcash' })
+    expect(balance(spent, 'gcash')).toBe(balance(wb, 'gcash') - 12000)
+  })
+
+  it('money from an e-wallet into savings counts as saved this month', () => {
+    const save: Transfer = { transferId: 'sv', date: '2030-01-23', fromAccount: 'gcash', toAccount: 'piggy', amount: 5000, note: '' }
+    expect(savedInMonth({ ...wb, transfers: [...wb.transfers, save] }, '2030-01')).toBe(savedInMonth(wb, '2030-01') + 5000)
   })
 })
 
