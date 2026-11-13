@@ -46,22 +46,33 @@ describe('App shell', () => {
     expect(screen.queryByRole('link', { name: 'Spending' })).not.toBeInTheDocument()
   })
 
-  it('opens the + menu with three actions, closes it with Escape, and hides the button on the Add page', async () => {
+  it('opens the + menu with four actions, closes it with Escape, and hides the button on the Add page', async () => {
     renderAt('/')
     const plus = screen.getByRole('button', { name: 'Add' })
     expect(plus).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(plus)
     expect(screen.getByRole('button', { name: 'Close add menu' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('link', { name: 'Money received' })).toHaveAttribute('href', '/add/other?type=received')
-    expect(screen.getByRole('link', { name: 'Add savings' })).toHaveAttribute('href', '/add/other?type=save')
-    expect(screen.getByRole('link', { name: 'Move money' })).toHaveAttribute('href', '/add/other?type=move')
+    expect(screen.getByRole('link', { name: 'Money in' })).toHaveAttribute('href', '/add?type=in')
+    expect(screen.getByRole('link', { name: 'Move money' })).toHaveAttribute('href', '/add?type=move')
+    expect(screen.getByRole('link', { name: 'Pay card' })).toHaveAttribute('href', '/add?type=pay')
+    expect(screen.queryByRole('link', { name: 'Add savings' })).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('link', { name: 'Money received' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Money in' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     await userEvent.click(screen.getByRole('link', { name: 'Add expense' }))
     expect(screen.getByRole('heading', { name: 'Add expense' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['received', 'Money in'],
+    ['income', 'Money in'],
+    ['save', 'Move money'],
+    ['move', 'Move money'],
+  ])('opens old Other entries links (%s) on the Add page', (type, heading) => {
+    renderAt(`/add/other?type=${type}`)
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
   })
 
   it('sends old statement links to the card page', () => {

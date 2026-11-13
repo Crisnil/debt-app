@@ -308,17 +308,7 @@ export function HomeView({ sheetId, workbook, today, refresh }: { sheetId: strin
   return (
     <section className="mx-auto max-w-4xl space-y-4">
       <h1 className="sr-only">Dashboard</h1>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
-        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
-          <Link to="/add" className="rounded-xl bg-green-900 px-4 py-2.5 text-center text-sm font-medium text-white active:bg-green-800">
-            + Add expense
-          </Link>
-          <Link to="/add/other?type=save" className="rounded-xl border border-green-900 bg-white px-4 py-2.5 text-center text-sm font-medium text-green-900 active:bg-green-50">
-            + Add savings
-          </Link>
-        </div>
-      </div>
+      <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
       <PaydayReminders sheetId={sheetId} workbook={workbook} today={today} />
       <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
       <Alerts workbook={workbook} forecasts={forecasts} today={today} />
