@@ -15,6 +15,7 @@ import { cardColor, monthLabel, STATUS } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 import { PaydayReminders, WhatWeHave } from './MoneyCards'
+import { SetupChecklist } from './SetupChecklist'
 
 /** Due items this close are shown in amber. */
 const DUE_SOON_DAYS = 7
@@ -286,7 +287,7 @@ export function DashboardPage() {
     return (
       <section>
         <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-        <p className="mt-2 text-slate-600">Connect your Google Sheet to start.</p>
+        <p className="mt-2 text-slate-600">Create your sheet in one tap, or connect the one you have, in Settings.</p>
         <Link to="/settings" className="mt-4 inline-block rounded-lg bg-green-900 px-4 py-2.5 text-sm font-medium text-white">
           Go to Settings
         </Link>
@@ -332,6 +333,7 @@ export function HomeView({ sheetId, workbook, today, refresh }: { sheetId: strin
     <section className="mx-auto max-w-4xl space-y-4">
       <h1 className="sr-only">Dashboard</h1>
       <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
+      <SetupChecklist workbook={workbook} />
       <PaydayReminders sheetId={sheetId} workbook={workbook} today={today} />
       <Alerts forecasts={forecasts} />
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">

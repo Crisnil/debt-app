@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveAccount, saveCreditLimit } from '../../data/actions'
+import { addCard, saveAccount, saveCreditLimit } from '../../data/actions'
 import { parseWorkbook } from '../../data/workbook'
 import { SessionProvider } from '../../state/session'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
@@ -13,6 +13,7 @@ vi.mock('../../data/actions', async (original) => ({
   ...(await original<typeof import('../../data/actions')>()),
   saveAccount: vi.fn(async () => {}),
   saveCreditLimit: vi.fn(async () => {}),
+  addCard: vi.fn(async () => {}),
 }))
 
 vi.mock('../../google/auth', async (original) => ({
@@ -146,4 +147,20 @@ describe('Settings lists', () => {
     expect(await screen.findByText('Saved Alpha limit.')).toBeInTheDocument()
     expect(saveCreditLimit).toHaveBeenCalledWith('s', base, expect.any(Number), 20000000, 'tok')
   })
+
+  it('adds a credit card with its days, limit, and interest', async () => {
+    renderSettings()
+    await userEvent.click(screen.getByRole('button', { name: '+ Add credit card' }))
+    const dialog = screen.getByRole('dialog', { name: 'Add credit card' })
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'BPI Credit')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add card' }))
+    expect(within(dialog).getByText('Enter the statement day and the due day, from 1 to 31.')).toBeInTheDocument()
+    await userEvent.type(within(dialog).getByLabelText('Statement day'), '10')
+    await userEvent.type(within(dialog).getByLabelText('Due day'), '30')
+    await userEvent.type(within(dialog).getByLabelText('Credit limit (₱, optional)'), '50000')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add card' }))
+    expect(await screen.findByText("Added BPI Credit. Paste its latest statement on the card's page.")).toBeInTheDocument()
+    expect(addCard).toHaveBeenCalledWith('s', expect.anything(), { name: 'BPI Credit', bank: '', statementDay: 10, dueDay: 30, creditLimit: 5000000, monthlyRate: 0.03 }, 'tok')
+  })
 })
+

@@ -4,14 +4,17 @@ import { SchemaError } from '../../data/workbook'
 import { useSession, useWorkbook } from '../../state/hooks'
 import { Button } from '../../ui/Button'
 import { ErrorNote } from '../../ui/ErrorNote'
+import { Field, TextInput } from '../../ui/form'
 import { useAction } from '../../ui/useAction'
 import { InstallCard, MoneySettings } from './MoneySettings'
 import { SheetUpdateCard } from './SheetUpdateCard'
 
 export function SettingsPage() {
-  const { signedIn, sheet, signIn, signOut, chooseSheet, forgetSheet } = useSession()
+  const { signedIn, sheet, signIn, signOut, chooseSheet, forgetSheet, createSheet } = useSession()
   const workbook = useWorkbook()
   const [link, setLink] = useState('')
+  const [name, setName] = useState('')
+  const createAction = useAction(createSheet)
   const signInAction = useAction(signIn)
   const pickAction = useAction(chooseSheet)
 
@@ -48,8 +51,26 @@ export function SettingsPage() {
             <ErrorNote message={signInAction.error} />
           </div>
 
+          {!sheet && (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <h2 className="font-medium text-green-900">New here? Create your sheet</h2>
+              <p className="mt-1 text-sm text-slate-700">
+                Sign in with Google and the app makes a new sheet in your Google Drive, ready to use. Your data stays in your Drive.
+              </p>
+              <div className="mt-3">
+                <Field label="Your name (optional)" htmlFor="new-name">
+                  <TextInput id="new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ana" />
+                </Field>
+              </div>
+              <Button className="mt-3 w-full" onClick={() => createAction.run(name.trim())} disabled={createAction.busy}>
+                {createAction.busy ? 'Creating your sheet…' : 'Create my sheet'}
+              </Button>
+              <ErrorNote message={createAction.error} />
+            </div>
+          )}
+
           <div className="rounded-xl bg-white p-4 shadow-sm">
-            <h2 className="font-medium text-slate-900">Your sheet</h2>
+            <h2 className="font-medium text-slate-900">{sheet ? 'Your sheet' : 'Already have a sheet?'}</h2>
             {sheet ? (
               <p className="mt-1 text-sm text-slate-600">
                 Using <span className="font-medium text-slate-900">{sheet.name}</span>
