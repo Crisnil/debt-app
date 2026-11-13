@@ -15,11 +15,12 @@ const kinds = [
 
 type Kind = (typeof kinds)[number]['value']
 
-/** Every entry in one place: ?type=expense (default), in, move, or pay. ?to= picks the account to move money to. */
+/** Every entry in one place: ?type=expense (default), in, move, or pay. ?to= picks the account to move money to; ?card= the card to pay. */
 export function AddPage() {
   const [params, setParams] = useSearchParams()
   const kind = kinds.find((k) => k.value === params.get('type')) ?? kinds[0]
   const to = params.get('to') ?? undefined
+  const card = params.get('card') ?? undefined
 
   return (
     <WithWorkbook title={kind.title}>
@@ -31,7 +32,7 @@ export function AddPage() {
           {kind.value === 'expense' && <ExpenseForm key="expense" sheetId={sheetId} workbook={workbook} />}
           {kind.value === 'in' && <MoneyInForm key="in" sheetId={sheetId} workbook={workbook} />}
           {kind.value === 'move' && <MoveMoneyForm key={`move-${to ?? ''}`} sheetId={sheetId} workbook={workbook} initialTo={to} />}
-          {kind.value === 'pay' && <PayCardForm key="pay" sheetId={sheetId} workbook={workbook} />}
+          {kind.value === 'pay' && <PayCardForm key={`pay-${card ?? ''}`} sheetId={sheetId} workbook={workbook} initialCard={card} />}
         </section>
       )}
     </WithWorkbook>

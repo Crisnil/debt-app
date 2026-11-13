@@ -182,17 +182,17 @@ export function BillsView({ sheetId, workbook, today }: { sheetId: string; workb
     setOpen(null)
     if (message) setSaved(message)
   }
-  const title = open === null ? '' : open.kind === 'add' ? 'Add payable' : `${open.kind === 'pay' ? 'Pay' : 'Edit'} ${open.item.payable.name}`
+  const title = open === null ? '' : open.kind === 'add' ? 'Add bill' : `${open.kind === 'pay' ? 'Pay' : 'Edit'} ${open.item.payable.name}`
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold text-slate-900">Bills · {monthLabel(month)}</h1>
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <SectionHead title="This month" addLabel="+ Add payable" onAdd={() => show({ kind: 'add' })} />
+        <SectionHead title="This month" addLabel="+ Add bill" onAdd={() => show({ kind: 'add' })} />
         <p className="mt-1 text-sm text-slate-600">
           Left to pay this month: <b className="text-slate-900">{formatPeso(left)}</b>
         </p>
         {rows.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-600">No bills this month. Add electric, water, internet, or money you owe with + Add payable.</p>
+          <p className="mt-3 text-sm text-slate-600">No bills this month. Add electric, water, internet, or money you owe with + Add bill.</p>
         ) : (
           <table className="mt-2 w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
             <thead>

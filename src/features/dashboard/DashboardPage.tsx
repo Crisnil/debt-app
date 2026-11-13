@@ -16,8 +16,11 @@ import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
 import { PaydayReminders, WhatWeHave } from './MoneyCards'
 
-/** Days ahead that alerts and "Next due" look at. */
+/** Due items this close are shown in amber. */
 const DUE_SOON_DAYS = 7
+/** Days ahead that Due next looks at, and how many it shows. */
+const DUE_NEXT_DAYS = 31
+const DUE_NEXT_SHOWN = 5
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
 
@@ -89,24 +92,12 @@ function Progress({ workbook, owed, today, debtFree }: { workbook: Workbook; owe
   )
 }
 
-function Alerts({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
-  const due = dueItems(workbook, forecasts, today, DUE_SOON_DAYS)
-  const late = due.filter((d) => d.dueDate < today)
-  const soon = due.filter((d) => d.dueDate >= today)
+/** Cards with a balance carried to the next bill, and the interest it costs. Due bills are in Due next. */
+function Alerts({ forecasts }: { forecasts: ReturnType<typeof forecastCards> }) {
   const carried = carriedAlerts(forecasts)
-  if (late.length === 0 && soon.length === 0 && carried.length === 0) return null
+  if (carried.length === 0) return null
   return (
-    <div className={`space-y-1 rounded-xl border p-3 text-sm ${late.length ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`} role="status">
-      {late.length > 0 && (
-        <p>
-          ▲ <b>{late.length} late:</b> {late.map((d) => d.name).join(', ')}
-        </p>
-      )}
-      {soon.length > 0 && (
-        <p>
-          ! <b>Due in {DUE_SOON_DAYS} days:</b> {soon.map((d) => `${d.name} (${d.dueDate.slice(5)})`).join(', ')}
-        </p>
-      )}
+    <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
       {carried.map((c) => (
         <p key={c.cardId}>
           ! <b>{c.name}:</b> {formatPeso(c.carried)} carried, about {formatPeso(c.interest)} interest on the {c.statementDate} bill.
@@ -116,7 +107,52 @@ function Alerts({ workbook, forecasts, today }: { workbook: Workbook; forecasts:
   )
 }
 
-function WhatWeOwe({ workbook, forecasts, owed }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; owed: ReturnType<typeof owedParts> }) {
+/** Days left, or days late, in words. */
+function dueIn(today: IsoDate, dueDate: IsoDate): string {
+  const days = daysBetween(today, dueDate)
+  if (days === 0) return 'due today'
+  if (days === 1) return 'due tomorrow'
+  if (days === -1) return '1 day late'
+  return days > 0 ? `in ${days} days` : `${-days} days late`
+}
+
+/** Card bills and bills not paid yet in the next month (late ones first), each with a Pay button. */
+function DueNext({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
+  const due = dueItems(workbook, forecasts, today, DUE_NEXT_DAYS)
+  const shown = due.slice(0, DUE_NEXT_SHOWN)
+  return (
+    <div className={panel}>
+      <SectionHead title="Due next" to="/bills" link="Bills" />
+      {shown.length === 0 && <p className="text-sm text-slate-600">Nothing due in the next {DUE_NEXT_DAYS} days ✓</p>}
+      <ul className="divide-y divide-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {shown.map((d) => {
+          const late = d.dueDate < today
+          return (
+            <li key={d.key} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0 text-sm">
+                <p className="font-medium text-slate-900">{d.name}</p>
+                <p className={late ? 'text-red-800' : daysBetween(today, d.dueDate) <= DUE_SOON_DAYS ? 'text-amber-900' : 'text-slate-500'}>
+                  {late ? '▲ ' : ''}
+                  {d.dueDate.slice(5)} · {dueIn(today, d.dueDate)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="text-sm text-slate-900">{formatPeso(d.amount)}</span>
+                <Link to={d.to} aria-label={`Pay ${d.name}`} className="rounded-lg bg-green-900 px-3 py-1.5 text-sm font-medium text-white active:bg-green-800">
+                  Pay
+                </Link>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {due.length > shown.length && <p className="mt-1 text-xs text-slate-500">+{due.length - shown.length} more on Bills and Cards</p>}
+    </div>
+  )
+}
+
+/** What we owe by card and bill, with the debt status (share of credit limits used). On the Plan page. */
+export function WhatWeOwe({ workbook, forecasts, owed }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; owed: ReturnType<typeof owedParts> }) {
   // Same colors as the Plan chart: each card by its row in the Cards tab, payables in their own color.
   const parts = owed.map((p) => ({ ...p, color: cardColor(workbook, p.id) }))
   const total = owed.reduce((s, p) => s + p.amount, 0)
@@ -166,32 +202,19 @@ function Tile({ label, children, to }: { label: string; children: ReactNode; to?
   )
 }
 
-function Tiles({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
-  const next = dueItems(workbook, forecasts, today, 62).find((d) => d.dueDate >= today) ?? null
+/** Bills due this month against income, and when bills go down. On the Plan page. */
+export function Tiles({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
   const month = thisMonth(workbook, forecasts, today)
   const over = month.income > 0 ? Math.round(((month.bills - month.income) / month.income) * 100) : null
   const drop = nextDrop(forecasts, today)
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Tile label="Next due" to={next?.to}>
-        {next ? (
-          <>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{next.name}</p>
-            <p className="text-sm text-slate-600">
-              {next.dueDate} · {formatPeso(next.amount)}
-            </p>
-            <p className="text-xs text-slate-500">in {daysBetween(today, next.dueDate)} days</p>
-          </>
-        ) : (
-          <p className="mt-1 text-lg font-semibold text-slate-900">Nothing due ✓</p>
-        )}
-      </Tile>
-      <Tile label={`Bills due in ${monthLabel(month.month)}`} to="/plan">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Tile label={`Bills due in ${monthLabel(month.month)}`}>
         <p className="mt-1 text-lg font-semibold text-slate-900">{formatPeso(month.bills)}</p>
         {over !== null && <Badge health={over > 0 ? 'bad' : over > -10 ? 'watch' : 'good'} word={over > 0 ? `${over}% over income` : `${-over}% under income`} />}
         <p className="mt-0.5 text-xs text-slate-500">Income {formatPeso(month.income)}</p>
       </Tile>
-      <Tile label="Next drop in bills" to="/plan">
+      <Tile label="When bills go down">
         {drop ? (
           <>
             <p className="mt-1 text-lg font-semibold text-slate-900">{monthLabel(drop.lastDue)}</p>
@@ -310,13 +333,12 @@ export function HomeView({ sheetId, workbook, today, refresh }: { sheetId: strin
       <h1 className="sr-only">Dashboard</h1>
       <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
       <PaydayReminders sheetId={sheetId} workbook={workbook} today={today} />
-      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
-      <Alerts workbook={workbook} forecasts={forecasts} today={today} />
+      <Alerts forecasts={forecasts} />
       <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-        <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owed} />
         <WhatWeHave workbook={workbook} today={today} refresh={refresh} />
+        <DueNext workbook={workbook} forecasts={forecasts} today={today} />
       </div>
-      <Tiles workbook={workbook} forecasts={forecasts} today={today} />
+      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
       <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
     </section>
   )

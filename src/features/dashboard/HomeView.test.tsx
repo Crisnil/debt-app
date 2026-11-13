@@ -70,12 +70,24 @@ describe('Home', () => {
     expect(screen.getAllByText('Cash').length).toBeGreaterThan(1) // the group heading and the account
   })
 
-  it('shows what we owe, the next due item, and this month', () => {
+  it('lists what is due next with a Pay button, and this month; What we owe is on Plan', () => {
     renderHome()
-    expect(screen.getByRole('heading', { name: 'What we owe' })).toBeInTheDocument()
-    expect(screen.getByText('Next due').closest('a')).toHaveAttribute('href', '/cards/alpha?tab=pay')
+    expect(screen.getByRole('heading', { name: 'Due next' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Pay Alpha' })).toHaveAttribute('href', '/add?type=pay&card=alpha')
+    expect(screen.queryByRole('heading', { name: 'What we owe' })).not.toBeInTheDocument()
     expect(screen.getByText('Income (plan)')).toBeInTheDocument()
     expect(screen.getByText('Interest (est.)')).toBeInTheDocument()
+  })
+
+  it('shows each balance as a number, and the total', () => {
+    renderHome()
+    const have = screen.getByRole('heading', { name: 'What we have' }).closest('div')!.parentElement!
+    expect(have).toHaveTextContent('Piggy Bank · savings goal₱5,200.00')
+  })
+
+  it('says when nothing is due', () => {
+    renderHome({ ...base, cards: [], payables: [] })
+    expect(screen.getByText('Nothing due in the next 31 days ✓')).toBeInTheDocument()
   })
 
   it('refreshes the balances with the ↻ button, and shows when and what is waiting', async () => {

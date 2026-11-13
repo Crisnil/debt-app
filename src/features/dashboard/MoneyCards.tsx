@@ -9,32 +9,26 @@ import type { IsoDate, Workbook } from '../../domain/types'
 import type { RefreshState } from '../../state/hooks'
 import { formatPeso, toPesos } from '../../lib/money'
 import { Button } from '../../ui/Button'
-import { Donut } from '../../ui/charts/Donut'
-import { accountColor } from '../../ui/charts/palette'
 import { TextInput } from '../../ui/form'
 import { parsePositiveAmount } from '../add/parseAmount'
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
-/** What we have: one part per money account, grouped Debit, E-wallet, Cash, with savings goal and spendable-now totals. */
+/** What we have: the total, savings goal and spendable now, then each account's balance, grouped Debit, E-wallet, Cash. */
 export function WhatWeHave({ workbook, today, refresh }: { workbook: Workbook; today: IsoDate; refresh?: RefreshState }) {
   const parts = moneyParts(workbook)
   if (parts.length === 0) return null
   const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
   const unchecked = canCheck ? accountsToCheck(workbook, today.slice(0, 7)) : []
   const totals = moneyTotals(parts)
-  // Ring order: by group (Debit, E-wallet, Cash), then by the account's row in the Accounts tab, not its size.
-  // Colors follow the row, so a color never moves.
+  // Grouped Debit, E-wallet, Cash; in each group by the account's row in the Accounts tab, not its size.
   const order = workbook.accounts.filter((a) => a.type !== 'credit_card').map((a) => a.accountId)
-  const inSheetOrder = [...parts].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
-  const donut = byGroup(inSheetOrder, (p) => p.type).map((p) => ({
-    id: p.id,
-    name: `${p.name}${p.isSavings ? ' · savings goal' : ''}${p.maintaining > 0 ? ` · 🔒 ${formatPeso(p.maintaining)} maintaining` : ''}`,
-    amount: Math.max(p.amount, 0),
-    color: accountColor(workbook, p.id),
-    group: TYPE_LABEL[p.type],
-  }))
+  const inSheetOrder = byGroup(
+    [...parts].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)),
+    (p) => p.type,
+  )
+  const groups = [...new Set(inSheetOrder.map((p) => p.type))].map((type) => ({ type, parts: inSheetOrder.filter((p) => p.type === type) }))
   return (
     <div className={panel}>
       <div className="mb-3 flex items-baseline justify-between">
@@ -49,11 +43,33 @@ export function WhatWeHave({ workbook, today, refresh }: { workbook: Workbook; t
           </Link>
         </span>
       </div>
-      <Donut parts={donut} centerLabel="have">
-        <p className="mb-2 border-b border-slate-100 pb-2 text-sm text-slate-600">
-          Savings goal: <b className="text-slate-900">{formatPeso(totals.savings)}</b> · Spendable now: <b className="text-slate-900">{formatPeso(totals.spendable)}</b>
-        </p>
-      </Donut>
+      <p className="text-2xl font-semibold text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {formatPeso(totals.total)}
+      </p>
+      <p className="mb-3 text-sm text-slate-600">
+        Savings goal: <b className="text-slate-900">{formatPeso(totals.savings)}</b> · Spendable now: <b className="text-slate-900">{formatPeso(totals.spendable)}</b>
+      </p>
+      <div className="space-y-3" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {groups.map((g) => (
+          <div key={g.type}>
+            <h3 className="flex justify-between border-b border-slate-100 pb-1 text-xs font-medium tracking-wide text-slate-500 uppercase">
+              <span>{TYPE_LABEL[g.type]}</span>
+              <span>{formatPeso(g.parts.reduce((s, p) => s + Math.max(p.amount, 0), 0))}</span>
+            </h3>
+            <ul className="divide-y divide-slate-50">
+              {g.parts.map((p) => (
+                <li key={p.id} className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
+                  <span className="min-w-0">
+                    <span className="text-slate-800">{`${p.name}${p.isSavings ? ' · savings goal' : ''}`}</span>
+                    {p.maintaining > 0 && <span className="block text-xs text-slate-500">🔒 {formatPeso(p.maintaining)} maintaining</span>}
+                  </span>
+                  <span className={p.amount < 0 ? 'text-red-800' : 'text-slate-900'}>{formatPeso(p.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
       {parts.some((p) => p.amount < 0) && <p className="mt-2 text-xs text-amber-900">! An account shows less than ₱0. Check its starting balance in Settings.</p>}
       {unchecked.length > 0 && (
         <p className="mt-2 text-sm text-slate-700">

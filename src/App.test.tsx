@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -73,6 +73,20 @@ describe('App shell', () => {
   ])('opens old Other entries links (%s) on the Add page', (type, heading) => {
     renderAt(`/add/other?type=${type}`)
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+  })
+
+  it('has Plan, Check balances, and Settings under More', () => {
+    renderAt('/more')
+    expect(screen.getByRole('heading', { name: 'More' })).toBeInTheDocument()
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('link', { name: /^Plan/ })).toHaveAttribute('href', '/plan')
+    expect(within(main).getByRole('link', { name: /^Check balances/ })).toHaveAttribute('href', '/balances')
+    expect(within(main).getByRole('link', { name: /^Settings/ })).toHaveAttribute('href', '/settings')
+  })
+
+  it('marks More in the bottom bar on a page under More', () => {
+    renderAt('/settings')
+    expect(screen.getByRole('link', { name: 'More' })).toHaveClass('font-semibold')
   })
 
   it('sends old statement links to the card page', () => {

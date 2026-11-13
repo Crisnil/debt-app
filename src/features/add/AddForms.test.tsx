@@ -73,6 +73,13 @@ describe('Pay card', () => {
   })
 })
 
+describe('Pay card from Due next', () => {
+  it('?card= starts with that card', () => {
+    renderWithSheet(<PayCardForm sheetId="pc" workbook={base} initialCard="beta" />, 'pc', base)
+    expect(pressed('Card')).toHaveTextContent('Beta')
+  })
+})
+
 describe('after a save', () => {
   beforeEach(() => localStorage.clear())
 
