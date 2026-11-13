@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { flushOutbox, mergeOutbox, readOutbox, subscribeOutbox, type OutboxItem } from '../data/outbox'
+import { undoEntry, type UndoRef } from '../data/actions'
+import { discard, flushOutbox, mergeOutbox, readOutbox, subscribeOutbox, type OutboxItem } from '../data/outbox'
 import { loadWorkbook } from '../data/workbook'
 import type { Workbook } from '../domain/types'
 import { AuthError, currentToken } from '../google/auth'
@@ -86,6 +87,20 @@ export function useSheetEdit() {
     setError(message)
   }, [])
   return { run, fail, busy, error, done }
+}
+
+/** Undo of an entry just added: takes it back while it waits on this phone, else voids it in the sheet. */
+export function useUndo() {
+  const { sheet } = useSession()
+  const { run, busy, error } = useSheetEdit()
+  const undo = useCallback(
+    async (ref: UndoRef): Promise<boolean> => {
+      if (sheet && discard(sheet.id, ref.id)) return true
+      return run('Undone.', (sheetId, wb, token) => undoEntry(sheetId, wb, ref, token))
+    },
+    [sheet, run],
+  )
+  return { undo, busy, error }
 }
 
 export type SyncState ={ pending: number; syncing: boolean; error: string | null; syncNow: () => void }
