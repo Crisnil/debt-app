@@ -90,18 +90,33 @@ describe('Home', () => {
     expect(screen.getByRole('link', { name: 'Alpha · Credit' })).toHaveAttribute('href', '/cards/alpha')
   })
 
-  it('lists what is due next with a Pay button, and this month; What we owe is on Plan', () => {
+  it('charts spent vs moved to savings per month, with this month selected', () => {
     renderHome()
-    expect(screen.getByRole('heading', { name: 'Due next' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Pay Alpha' })).toHaveAttribute('href', '/add?type=pay&card=alpha')
+    expect(screen.getByRole('heading', { name: 'Spent vs saved' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Jan 2030: spent ₱4,650.25, moved to savings ₱200.00' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Jan 2030 (so far)')).toBeInTheDocument()
+    // Due next and This month are gone: due bills are behind the bell, balances are on the cards.
+    expect(screen.queryByRole('heading', { name: 'Due next' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Income (plan)')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'What we owe' })).not.toBeInTheDocument()
-    expect(screen.getByText('Income (plan)')).toBeInTheDocument()
-    expect(screen.getByText('Interest (est.)')).toBeInTheDocument()
   })
 
-  it('says when nothing is due', () => {
-    renderHome({ ...base, cards: [], payables: [] })
-    expect(screen.getByText('Nothing due in the next 31 days ✓')).toBeInTheDocument()
+  it('shows another month of the chart on tap', async () => {
+    renderHome()
+    await userEvent.click(screen.getByRole('button', { name: /^Dec 2029:/ }))
+    expect(screen.getByText('Dec 2029')).toBeInTheDocument()
+  })
+
+  it('lists the 5 newest transactions of every kind, with View all', () => {
+    renderHome()
+    const recent = screen.getByRole('heading', { name: 'Recent transactions' }).closest('div')!.parentElement!
+    expect(within(recent).getAllByRole('listitem')).toHaveLength(5)
+    expect(within(recent).getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/transactions')
+  })
+
+  it('says so when there are no transactions yet', () => {
+    renderHome({ ...base, transfers: [], payments: [], incomeLog: [], transactions: [], lines: [] })
+    expect(screen.getByText('Nothing yet. Add one with the + button.')).toBeInTheDocument()
   })
 
   it('refreshes the balances with the ↻ button, and shows when and what is waiting', async () => {

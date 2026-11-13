@@ -1,10 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
-/** phone: in the bottom bar. wide: in the sidebar. Pages left out of the bottom bar are on More. */
+/** phone: in the bottom bar (the + button sits in the middle). wide: in the sidebar. Pages left out of the bottom bar are on More. */
 const items = [
   { to: '/', label: 'Home', phone: true, wide: true },
   { to: '/cards', label: 'Cards', phone: true, wide: true },
-  { to: '/bills', label: 'Bills', phone: true, wide: true },
+  { to: '/bills', label: 'Bills', phone: false, wide: true },
   { to: '/transactions', label: 'Transactions', phone: true, wide: true },
   { to: '/plan', label: 'Plan', phone: false, wide: true },
   { to: '/balances', label: 'Check balances', phone: false, wide: true },
@@ -26,7 +26,9 @@ export function MainNav() {
     >
       <p className="hidden px-6 pt-6 pb-4 text-lg font-semibold text-green-900 lg:block">Debt App</p>
       <ul className="mx-auto grid max-w-md grid-cols-5 lg:max-w-none lg:grid-cols-1 lg:gap-1 lg:px-3">
-        {items.map((item) => (
+        {items.map((item) => [
+          // Phones: an empty middle slot for the + button (AddButton), between Cards and Transactions.
+          item.to === '/transactions' && <li key="add-slot" className="lg:hidden" aria-hidden="true" />,
           <li key={item.to} className={`${item.phone ? '' : 'hidden'} ${item.wide ? 'lg:block' : 'lg:hidden'}`}>
             <NavLink
               to={item.to}
@@ -39,8 +41,8 @@ export function MainNav() {
             >
               {item.label}
             </NavLink>
-          </li>
-        ))}
+          </li>,
+        ])}
       </ul>
     </nav>
   )

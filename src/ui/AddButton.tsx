@@ -16,7 +16,7 @@ const ACTIONS = [
 ]
 
 /**
- * Round + button in the bottom-right corner. Tap it to open four actions above it; the + turns into ×.
+ * Round + button: on phones in the middle of the bottom bar, on wide screens in the bottom-right corner. Tap it to open four actions above it; the + turns into ×.
  * Tap ×, tap outside, or press Escape to close. Hidden on the Add pages.
  */
 export function AddButton() {
@@ -37,9 +37,9 @@ export function AddButton() {
   return (
     <>
       {open && <div className="fixed inset-0 z-20 bg-slate-900/20" aria-hidden="true" onClick={() => setOpen(false)} />}
-      <div className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 flex flex-col items-end gap-3 lg:right-8 lg:bottom-8">
+      <div className="fixed bottom-[calc(0.5rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-3 lg:right-8 lg:bottom-8 lg:left-auto lg:translate-x-0 lg:items-end">
         {open && (
-          <ul id="add-menu" className="flex flex-col items-end gap-3" aria-label="Add">
+          <ul id="add-menu" className="flex flex-col items-end gap-3 max-lg:items-center" aria-label="Add">
             {ACTIONS.map((a) => (
               <li key={a.to}>
                 <Link to={a.to} className="flex items-center gap-3" onClick={() => setOpen(false)}>
@@ -56,7 +56,7 @@ export function AddButton() {
           aria-expanded={open}
           aria-controls="add-menu"
           onClick={() => setOpen(!open)}
-          className={`flex h-14 w-14 items-center justify-center rounded-full text-3xl text-white shadow-lg ${open ? 'bg-slate-700' : 'bg-green-900 active:bg-green-800'}`}
+          className={`flex h-14 w-14 items-center justify-center rounded-full text-3xl text-white shadow-lg ring-4 ring-white lg:ring-0 ${open ? 'bg-slate-700' : 'bg-green-900 active:bg-green-800'}`}
         >
           <span aria-hidden="true">{open ? '×' : '+'}</span>
         </button>
