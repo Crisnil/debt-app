@@ -73,9 +73,20 @@ export function CardRow({ c, next, toCheck, children }: { c: CardSummary; next: 
           </dl>
         </div>
       )}
-      <Link to={`/cards/${c.card.cardId}`} className="mt-3 inline-block text-sm text-green-900 underline">
-        Open card: check, paste statement, pay{toCheck > 0 ? ` · ${toCheck} to check` : ''}
-      </Link>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        {c.status !== 'paid' && (
+          <Link
+            to={`/add?type=pay&card=${c.card.cardId}`}
+            aria-label={`Pay ${c.card.name}`}
+            className="rounded-lg bg-green-900 px-4 py-2 text-sm font-medium text-white active:bg-green-800"
+          >
+            Pay
+          </Link>
+        )}
+        <Link to={`/cards/${c.card.cardId}`} className="text-sm text-green-900 underline">
+          Open card: check statement{toCheck > 0 ? ` · ${toCheck} to check` : ''}
+        </Link>
+      </div>
     </li>
   )
 }

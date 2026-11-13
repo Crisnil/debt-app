@@ -22,6 +22,8 @@ export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; wo
 
   const card = workbook.cards.find((c) => c.cardId === cardId)
   const summary = card ? summarizeCard(workbook, card, todayIso()) : null
+  // The minimum less what was paid since the statement.
+  const minimumLeft = summary?.snapshot ? Math.max(summary.snapshot.minimumDue - summary.paidSinceStatement, 0) : 0
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -42,9 +44,16 @@ export function PaymentForm({ sheetId, workbook, cardId }: { sheetId: string; wo
           Left on the {summary.snapshot.asOf} statement: <b>{formatPeso(summary.remainingDue)}</b> (due {summary.snapshot.dueDate}). Minimum{' '}
           {formatPeso(summary.snapshot.minimumDue)}.
           {summary.remainingDue > 0 && (
-            <button type="button" className="ml-2 text-green-900 underline" onClick={() => setAmount(toPesos(summary.remainingDue).toFixed(2))}>
-              Pay in full
-            </button>
+            <span className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="rounded-full border border-green-900 px-3 py-1 font-medium text-green-900" onClick={() => setAmount(toPesos(summary.remainingDue).toFixed(2))}>
+                Pay in full {formatPeso(summary.remainingDue)}
+              </button>
+              {minimumLeft > 0 && minimumLeft < summary.remainingDue && (
+                <button type="button" className="rounded-full border border-slate-300 px-3 py-1 text-slate-700" onClick={() => setAmount(toPesos(minimumLeft).toFixed(2))}>
+                  Pay minimum {formatPeso(minimumLeft)}
+                </button>
+              )}
+            </span>
           )}
         </div>
       )}

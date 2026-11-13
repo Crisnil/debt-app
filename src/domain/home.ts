@@ -73,6 +73,14 @@ export function dueItems(wb: Workbook, forecasts: CardForecast[], today: IsoDate
   return items.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 }
 
+/** Days ahead that count for the app icon badge. */
+export const BADGE_DAYS = 3
+
+/** Number on the app icon: bills and card bills late or due in the next BADGE_DAYS days. */
+export function badgeCount(wb: Workbook, forecasts: CardForecast[], today: IsoDate): number {
+  return dueItems(wb, forecasts, today, BADGE_DAYS).length
+}
+
 export type CarriedAlert = { cardId: string; name: string; carried: Centavos; interest: Centavos; statementDate: IsoDate }
 
 /** Cards with an unpaid balance carried to the next bill, and the interest it will cost (estimate). */

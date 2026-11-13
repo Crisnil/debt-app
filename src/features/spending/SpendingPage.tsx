@@ -8,7 +8,7 @@ import { categoryOf, spendingByCategory, type CategorySpending } from '../../dom
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { monthLabel, OTHER_COLOR, STATUS } from '../../ui/charts/palette'
-import { Field, Select, SuccessNote } from '../../ui/form'
+import { Field, Select, SuccessNote, TextInput } from '../../ui/form'
 import { Modal } from '../../ui/Modal'
 import { EntryCorrection, ItemDialogBody } from './ItemDialog'
 import { WithWorkbook } from '../WithWorkbook'
@@ -157,17 +157,19 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
   const all = entries(workbook)
   const [open, setOpen] = useState<Entry | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  // '' is all months.
   const [month, setMonth] = useState(today.slice(0, 7))
+  const [search, setSearch] = useState('')
   const [kind, setKind] = useState<EntryKind | ''>('')
   const [accountId, setAccountId] = useState('')
   const [category, setCategory] = useState('')
   const inMonth = filterEntries(all, { month, kind: '', accountId: '', category: '' })
   const forAccount = filterEntries(inMonth, { month, kind: '', accountId, category: '' })
-  const shown = filterEntries(forAccount, { month, kind, accountId, category })
+  const shown = filterEntries(forAccount, { month, kind, accountId, category, search })
   const purchases = forAccount.flatMap((e) => (e.item ? [e.item] : []))
   const rows = spendingByCategory(workbook, purchases)
   const totals = totalsByKind(forAccount)
-  const plan = plannedLiving(workbook, month)
+  const plan = month ? plannedLiving(workbook, month) : null
   const movedIn = forAccount.filter((e) => e.kind === 'move' && e.to === accountId).reduce((s, e) => s + e.amount, 0)
   // Keep a chosen filter in its list after the month changes, so the select shows what is filtered.
   const accounts = entryAccounts(workbook, inMonth)
@@ -187,6 +189,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Field label="Month" htmlFor="sp-month">
             <Select id="sp-month" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <option value="">All months</option>
               {entryMonths(all, today.slice(0, 7)).map((m) => (
                 <option key={m} value={m}>
                   {monthLabel(m)}
@@ -233,7 +236,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
             </Select>
           </Field>
         </div>
-        <p className="mt-3 text-xs text-slate-500">Spent in {monthLabel(month)}{accountId && ` from ${accountLabel(workbook, accountId)}`}</p>
+        <p className="mt-3 text-xs text-slate-500">Spent {month ? `in ${monthLabel(month)}` : 'in all months'}{accountId && ` from ${accountLabel(workbook, accountId)}`}</p>
         <p className="text-3xl font-semibold text-slate-900">{formatPeso(totals.purchase)}</p>
         {plan !== null && plan > 0 && !accountId && (
           <p className={`text-sm ${totals.purchase > plan ? 'text-red-800' : 'text-slate-700'}`}>
@@ -279,7 +282,15 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
               </button>
             )}
           </h2>
-          <p className="mb-2 text-xs text-slate-500">Tap an entry to see it, correct it, or void it.</p>
+          <Field label="Search" htmlFor="sp-search">
+            <TextInput id="sp-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="e.g. Savemore, Grab, GCash" />
+          </Field>
+          {search && (
+            <p className="mt-1 text-xs text-slate-500">
+              {shown.length} found in {month ? monthLabel(month) : 'all months'}.{month && ' To look in every month, choose All months.'}
+            </p>
+          )}
+          <p className="mt-2 mb-2 text-xs text-slate-500">Tap an entry to see it, correct it, or void it.</p>
           <SuccessNote message={saved} />
           <EntryList
             workbook={workbook}
