@@ -24,7 +24,7 @@ export function SavingsForm({ sheetId, workbook }: { sheetId: string; workbook: 
   const [saved, setSaved] = useState<string | null>(null)
 
   if (savings.length === 0) {
-    return <p className="text-sm text-slate-600">No savings account yet. In the Accounts tab, set is_savings to TRUE for your savings account.</p>
+    return <p className="text-sm text-slate-600">No savings goal account yet. In Settings → Accounts, edit one and tick “Savings goal money”.</p>
   }
 
   function submit(e: FormEvent) {

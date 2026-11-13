@@ -81,7 +81,7 @@ function Progress({ workbook, owed, today, debtFree }: { workbook: Workbook; owe
               <dd className="text-right text-slate-800">{formatPeso(p.amount)}</dd>
             </div>
           ))}
-          {savings.length === 0 && <dt className="col-span-2 text-slate-500">No savings account yet. Mark one with is_savings in the Accounts tab.</dt>}
+          {savings.length === 0 && <dt className="col-span-2 text-slate-500">No savings goal account yet. In Settings → Accounts, edit one and tick “Savings goal money”.</dt>}
         </dl>
       )}
       <p className="sr-only">As of {today}</p>

@@ -432,27 +432,22 @@ export async function saveCreditLimit(sheetId: string, wb: Workbook, row: number
   await updateCells(sheetId, [{ range: cellRange('Cards', h, 'credit_limit', row), values: [[pesos(limit)]] }], token)
 }
 
-export async function saveAccountOpening(
-  sheetId: string,
-  wb: Workbook,
-  row: number,
-  openingBalance: Centavos,
-  openingDate: IsoDate,
-  token: string,
-  maintainingBalance?: Centavos,
-) {
+export type NewAccount = { label: string; type: 'bank' | 'cash' | 'e-wallet'; isSavings: boolean; openingBalance: Centavos; openingDate: IsoDate; maintainingBalance: Centavos }
+
+/** Saves an account's name, type, savings goal tick, and starting balance. The account_id stays, so entries keep pointing to it. */
+export async function saveAccount(sheetId: string, wb: Workbook, row: number, account: NewAccount, token: string) {
   const h = wb.headers.Accounts
+  const cell = (column: string, value: CellValue) => ({ range: cellRange('Accounts', h, column, row), values: [[value]] })
   const updates = [
-    { range: cellRange('Accounts', h, 'opening_balance', row), values: [[pesos(openingBalance)]] },
-    { range: cellRange('Accounts', h, 'opening_date', row), values: [[openingDate]] },
+    cell('label', account.label),
+    cell('type', account.type),
+    cell('is_savings', account.isSavings),
+    cell('opening_balance', pesos(account.openingBalance)),
+    cell('opening_date', account.openingDate),
   ]
-  if (maintainingBalance !== undefined && h.includes('maintaining_balance')) {
-    updates.push({ range: cellRange('Accounts', h, 'maintaining_balance', row), values: [[pesos(maintainingBalance)]] })
-  }
+  if (h.includes('maintaining_balance')) updates.push(cell('maintaining_balance', account.maintainingBalance ? pesos(account.maintainingBalance) : ''))
   await updateCells(sheetId, updates, token)
 }
-
-export type NewAccount = { label: string; type: 'bank' | 'cash' | 'e-wallet'; isSavings: boolean; openingBalance: Centavos; openingDate: IsoDate; maintainingBalance: Centavos }
 
 /** An id from the name that is not used yet: "BPI Savings" -> "bpi-savings" (or "bpi-savings-2"). */
 export function newAccountId(wb: Pick<Workbook, 'accounts' | 'cards'>, label: string): string {

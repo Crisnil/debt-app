@@ -3,7 +3,7 @@ import { accountBalances } from './balances'
 import { daysBetween, summarizeDues } from './dues'
 import { billsByMonth, installmentsEnding, monthlyIncome, PAYABLES, withPayables, type CardForecast, type PlanEnding } from './forecast'
 import { addMonths, payableMonths, payablesOwed } from './payables'
-import type { IsoDate, Workbook } from './types'
+import type { AccountType, IsoDate, Workbook } from './types'
 
 export type OwedPart = { id: string; name: string; amount: Centavos; to: string }
 
@@ -23,16 +23,16 @@ export function savingsParts(wb: Workbook): SavingsPart[] {
     .map((b) => ({ id: b.account.accountId, name: b.account.label, amount: Math.max(b.balance, 0) }))
 }
 
-export type MoneyPart = { id: string; name: string; amount: Centavos; isSavings: boolean; maintaining: Centavos }
+export type MoneyPart = { id: string; name: string; type: AccountType; amount: Centavos; isSavings: boolean; maintaining: Centavos }
 
 /** What we have: the balance of every active money account (banks, cash, e-wallets), biggest first. */
 export function moneyParts(wb: Workbook): MoneyPart[] {
   return accountBalances(wb)
-    .map((b) => ({ id: b.account.accountId, name: b.account.label, amount: b.balance, isSavings: b.account.isSavings, maintaining: b.account.maintainingBalance }))
+    .map((b) => ({ id: b.account.accountId, name: b.account.label, type: b.account.type, amount: b.balance, isSavings: b.account.isSavings, maintaining: b.account.maintainingBalance }))
     .sort((a, b) => b.amount - a.amount)
 }
 
-/** Totals of what we have: all accounts, savings accounts, and spendable now (not savings, above the maintaining balance). */
+/** Totals of what we have: all accounts, savings goal money, and spendable now (not savings goal money, above the maintaining balance). */
 export function moneyTotals(parts: MoneyPart[]): { total: Centavos; savings: Centavos; spendable: Centavos } {
   return {
     total: parts.reduce((s, p) => s + Math.max(p.amount, 0), 0),
