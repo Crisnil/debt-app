@@ -106,5 +106,13 @@ describe('Transactions page', () => {
     expect(screen.getByText('1 found in all months.')).toBeInTheDocument()
     expect(screen.getByText(/Spent in all months/)).toBeInTheDocument()
   })
-})
 
+  it('starts filtered to the account from the Home card link', () => {
+    render(
+      <MemoryRouter>
+        <SpendingView workbook={base} today="2030-01-21" account="payroll" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText('Account')).toHaveValue('payroll')
+  })
+})

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { accountLabel } from '../../domain/accounts'
 import { entries, entryAccounts, entryMonths, filterEntries, KIND_LABEL, totalsByKind, type Entry, type EntryKind } from '../../domain/activity'
 import { todayIso } from '../../domain/dues'
@@ -153,7 +154,8 @@ function EntryDetails({ workbook, entry: e, onSaved }: { workbook: Workbook; ent
 }
 
 /** Every entry once (purchases, money in, moves, card payments), with filters, month totals, and budget vs actual. */
-export function SpendingView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
+/** `account`: start filtered to this account (Home cards link here with ?account=). */
+export function SpendingView({ workbook, today, account = '' }: { workbook: Workbook; today: IsoDate; account?: string }) {
   const all = entries(workbook)
   const [open, setOpen] = useState<Entry | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -161,7 +163,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
   const [month, setMonth] = useState(today.slice(0, 7))
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState<EntryKind | ''>('')
-  const [accountId, setAccountId] = useState('')
+  const [accountId, setAccountId] = useState(account)
   const [category, setCategory] = useState('')
   const inMonth = filterEntries(all, { month, kind: '', accountId: '', category: '' })
   const forAccount = filterEntries(inMonth, { month, kind: '', accountId, category: '' })
@@ -332,5 +334,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
 }
 
 export function SpendingPage() {
-  return <WithWorkbook title="Transactions">{(_sheetId, workbook) => <SpendingView workbook={workbook} today={todayIso()} />}</WithWorkbook>
+  const [params] = useSearchParams()
+  const account = params.get('account') ?? ''
+  return <WithWorkbook title="Transactions">{(_sheetId, workbook) => <SpendingView key={account} workbook={workbook} today={todayIso()} account={account} />}</WithWorkbook>
 }
