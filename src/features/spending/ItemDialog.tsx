@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { saveCheckCount, saveExpense, saveLine, VOID_REASONS, voidBalanceCheck, voidExpense, voidLine, type VoidReason } from '../../data/actions'
+import { saveCheckCount, saveExpense, saveLine, VOID_REASONS, voidBalanceCheck, voidEntry, voidExpense, voidLine, type VoidReason } from '../../data/actions'
+import type { EntryRef } from '../../domain/activity'
 import { accountLabel, expenseCategories, paidFromAccounts } from '../../domain/accounts'
 import { type SpendingItem } from '../../domain/reconcile'
 import type { StatementLine, Transaction, Workbook } from '../../domain/types'
@@ -65,6 +66,30 @@ function VoidBox({ what, edit, onVoid, children }: { what: string; edit: SheetEd
           Keep
         </Button>
       </div>
+    </div>
+  )
+}
+
+const ENTRY_WHAT: Record<EntryRef['tab'], string> = { Transfers: 'move', IncomeLog: 'money in', Payments: 'card payment' }
+
+/** Void a move, money in, or card payment (e.g. entered twice). */
+export function EntryVoid({ entry, label, onSaved }: { entry: EntryRef; label: string; onSaved: Saved }) {
+  const edit = useSheetEdit()
+  if (!entry.row) return waiting
+  const what = ENTRY_WHAT[entry.tab]
+
+  async function voidIt(reason: VoidReason) {
+    const message = `Voided ${label} (${reason.toLowerCase()}).`
+    if (await edit.run(message, (sheetId, wb, token) => voidEntry(sheetId, wb, entry, reason, token))) onSaved(message)
+  }
+
+  return (
+    <div className="space-y-2">
+      <VoidBox what={what} edit={edit} onVoid={(r) => void voidIt(r)}>
+        {entry.tab === 'Transfers' && <p>Both balances go back as if it did not happen.</p>}
+        {entry.tab === 'Payments' && <p>The card shows this amount as not paid again.</p>}
+      </VoidBox>
+      <ErrorNote message={edit.error} />
     </div>
   )
 }

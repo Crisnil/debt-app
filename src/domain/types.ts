@@ -29,7 +29,8 @@ export type CardSnapshot = {
   interestCharged: Centavos
 }
 
-export type Payment = { payId: string; date: IsoDate; cardId: string; amount: Centavos; fromAccount: string }
+/** createdAt: when the entry was typed (ISO time). Orders entries and balance checks on the same date. '' or missing: unknown. */
+export type Payment = { payId: string; date: IsoDate; cardId: string; amount: Centavos; fromAccount: string; createdAt?: string; row?: number }
 
 export type LineType = 'installment' | 'straight' | 'payment' | 'interest' | 'fee' | 'credit'
 
@@ -65,6 +66,8 @@ export type Account = {
   active: boolean
   /** Amount the bank requires to stay in the account (not spendable). 0 when none. */
   maintainingBalance: Centavos
+  /** When the account was added (ISO time): entries typed later on the opening date count. '' when unknown. */
+  createdAt: string
   row: number
 }
 
@@ -81,6 +84,7 @@ export type Transaction = {
   payableId?: string
   /** The month (YYYY-MM) of the payable that this expense pays. */
   payableMonth?: string
+  createdAt?: string
   /** Sheet row number (1-based) in the Transactions tab. 0 or missing: not in the sheet yet. */
   row?: number
 }
@@ -136,7 +140,7 @@ export type BalanceCheck = {
 }
 
 /** Money moved between two accounts. Not spending. */
-export type Transfer = { transferId: string; date: IsoDate; fromAccount: string; toAccount: string; amount: Centavos; note: string }
+export type Transfer = { transferId: string; date: IsoDate; fromAccount: string; toAccount: string; amount: Centavos; note: string; createdAt?: string; row?: number }
 
 export type IncomeSource = {
   sourceId: string
@@ -164,6 +168,8 @@ export type IncomeEntry = {
   amount: Centavos
   toAccount: string
   note: string
+  createdAt?: string
+  row?: number
 }
 
 export type SettingRow = { value: string; row: number }

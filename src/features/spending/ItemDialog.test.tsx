@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveCheckCount, saveExpense, saveLine, voidBalanceCheck, voidExpense, voidLine } from '../../data/actions'
+import { saveCheckCount, saveExpense, saveLine, voidBalanceCheck, voidEntry, voidExpense, voidLine } from '../../data/actions'
 import { parseWorkbook } from '../../data/workbook'
 import type { Workbook } from '../../domain/types'
 import { SessionProvider } from '../../state/session'
@@ -18,6 +18,7 @@ vi.mock('../../data/actions', async (original) => ({
   voidLine: vi.fn(async () => {}),
   saveCheckCount: vi.fn(async () => {}),
   voidBalanceCheck: vi.fn(async () => {}),
+  voidEntry: vi.fn(async () => {}),
 }))
 
 vi.mock('../../google/auth', async (original) => ({
@@ -51,7 +52,7 @@ const openItem = (name: RegExp) => userEvent.click(screen.getByRole('button', { 
 const dialog = () => screen.getByRole('dialog')
 const inDialog = () => within(dialog())
 
-async function voidWith(what: string, reason: 'Did not happen' | 'Entered by mistake') {
+async function voidWith(what: string, reason: 'Entered twice' | 'Did not happen' | 'Entered by mistake') {
   await userEvent.click(inDialog().getByRole('button', { name: `Void this ${what}` }))
   const box = inDialog().getByRole('alertdialog', { name: `Void this ${what}` })
   await userEvent.click(within(box).getByRole('button', { name: reason }))
@@ -151,5 +152,34 @@ describe('Spending: correct or void', () => {
     await voidWith('balance check', 'Entered by mistake')
     expect(await screen.findByText('Voided the balance check (entered by mistake).')).toBeInTheDocument()
     expect(voidBalanceCheck).toHaveBeenCalledWith('s', expect.anything(), check, 'Entered by mistake', 'tok')
+  })
+
+  it('shows a move with where to change it, and voids it when entered twice', async () => {
+    renderSpending()
+    await openItem(/^Piggy Bank → Cash ₱100.00: details/)
+    expect(dialog()).toHaveAccessibleName('Move')
+    expect(dialog()).toHaveTextContent('FromPiggy Bank')
+    expect(dialog()).toHaveTextContent('ToCash')
+    expect(dialog()).toHaveTextContent('Not spending. To change it, edit the Transfers tab of the sheet.')
+    await voidWith('move', 'Entered twice')
+    expect(await screen.findByText('Voided Piggy Bank → Cash (entered twice).')).toBeInTheDocument()
+    expect(voidEntry).toHaveBeenCalledWith('s', expect.anything(), { tab: 'Transfers', id: 'tr2', row: 3 }, 'Entered twice', 'tok')
+  })
+
+  it('voids money in and a card payment', async () => {
+    renderSpending()
+    await openItem(/^Salary ₱20,000.00: details/)
+    await voidWith('money in', 'Did not happen')
+    expect(voidEntry).toHaveBeenCalledWith('s', expect.anything(), { tab: 'IncomeLog', id: 'i1', row: 2 }, 'Did not happen', 'tok')
+    await openItem(/^Beta payment ₱1,200.00: details/)
+    await voidWith('card payment', 'Entered by mistake')
+    expect(voidEntry).toHaveBeenCalledWith('s', expect.anything(), { tab: 'Payments', id: 'p3', row: 4 }, 'Entered by mistake', 'tok')
+  })
+
+  it('waits for a move that is not in the sheet yet', async () => {
+    renderSpending({ ...base, transfers: [...base.transfers, { transferId: 'new', date: '2030-01-21', fromAccount: 'payroll', toAccount: 'cash', amount: 5000, note: '' }] })
+    await openItem(/^Payroll → Cash ₱50.00: details/)
+    expect(dialog()).toHaveTextContent('not in the sheet yet')
+    expect(inDialog().queryByRole('button', { name: 'Void this move' })).not.toBeInTheDocument()
   })
 })

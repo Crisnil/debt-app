@@ -3,6 +3,7 @@ import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { accountBalances, accountsToCheck, checkResults, savedInMonth } from './balances'
 import { NOT_RECORDED, spendingItems } from './reconcile'
+import type { CellValue } from '../google/sheetsApi'
 import type { BalanceCheck, Workbook } from './types'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
@@ -80,3 +81,48 @@ describe('balance check', () => {
     expect(accountsToCheck(wb, '2030-01').map((a) => a.accountId)).toEqual(['payroll', 'piggy'])
   })
 })
+
+describe('entries on the same day as a balance check or the opening balance', () => {
+  const move = (id: string, createdAt: string, amount = 50000) => ({ transferId: id, date: '2030-01-20', fromAccount: 'payroll', toAccount: 'cash', amount, note: '', createdAt })
+  const at = (time: string) => ({ ...check('cash', '2030-01-20', 10000), createdAt: `2030-01-20T${time}Z` })
+
+  it('counts a move typed after a same-day check, and not one typed before it', () => {
+    const wb: Workbook = { ...withChecks(at('10:00:00')), transfers: [...base.transfers, move('before', '2030-01-20T09:00:00Z', 20000), move('after', '2030-01-20T11:00:00Z')] }
+    // Real ₱100 at 10:00 (includes the 09:00 move), then +₱500 at 11:00.
+    expect(balanceOf(wb, 'cash')).toBe(60000)
+    // The check compares with entries up to it only: the 09:00 move is in what the app expected, the 11:00 one is not.
+    expect(checkResults(wb)[0].expected).toBe(balanceOf(base, 'cash') + 20000)
+  })
+
+  it('does not count a same-day entry without a time (old rows): the typed balance includes it', () => {
+    const wb: Workbook = { ...withChecks(at('10:00:00')), transfers: [...base.transfers, move('old', '')] }
+    expect(balanceOf(wb, 'cash')).toBe(10000)
+  })
+
+  it('counts moves typed after a new account was added on the same day', () => {
+    const bpi = { ...base.accounts[0], accountId: 'bpi', label: 'BPI', openingBalance: 105194, openingDate: '2030-01-20', createdAt: '2030-01-20T08:00:00Z', row: 99 }
+    const toBpi = { transferId: 'b1', date: '2030-01-20', fromAccount: 'payroll', toAccount: 'bpi', amount: 600000, note: '', createdAt: '2030-01-20T09:00:00Z' }
+    const wb: Workbook = { ...base, accounts: [...base.accounts, bpi], transfers: [...base.transfers, toBpi] }
+    expect(balanceOf(wb, 'bpi')).toBe(705194)
+    // Without the time the account was added (old rows), the opening balance is taken to include it.
+    expect(balanceOf({ ...wb, accounts: [...base.accounts, { ...bpi, createdAt: '' }] }, 'bpi')).toBe(105194)
+  })
+})
+
+describe('voided entries', () => {
+  it('ignores voided moves, money in, and card payments in the sheet', () => {
+    const voided = (rows: CellValue[][], extra: CellValue[]) => [[...rows[0], 'voided_at', 'void_reason'], ...rows.slice(1).map((r, i) => [...r, ...(i === 0 ? extra : ['', ''])])]
+    const wb = parseWorkbook('Sample', fixtureTabs, {
+      ...fixtureValues,
+      Transfers: voided(fixtureValues.Transfers, ['2030-01-21T00:00:00Z', 'Entered twice']),
+      IncomeLog: voided(fixtureValues.IncomeLog, ['2030-01-21T00:00:00Z', 'Did not happen']),
+      Payments: voided(fixtureValues.Payments, ['2030-01-21T00:00:00Z', 'Entered by mistake']),
+    })
+    expect(wb.transfers.map((t) => t.transferId)).toEqual(['tr2', 'tr3'])
+    expect(wb.incomeLog).toHaveLength(0)
+    expect(wb.payments.map((p) => p.payId)).toEqual(['p2', 'p3'])
+    // tr1 moved ₱300 from Payroll to Piggy Bank: both balances go back.
+    expect(balanceOf(wb, 'piggy')).toBe(balanceOf(base, 'piggy') - 30000)
+  })
+})
+

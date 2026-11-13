@@ -13,13 +13,13 @@ const now = () => new Date().toISOString()
 export type ExpenseInput = { date: IsoDate; amount: Centavos; merchant: string; category: string; methodId: string; note: string; payableId?: string; payableMonth?: string }
 
 export function addExpense(sheetId: string, input: ExpenseInput): Transaction {
-  const value: Transaction = { txnId: newId(), ...input }
+  const value: Transaction = { txnId: newId(), ...input, createdAt: now() }
   enqueue(sheetId, {
     key: value.txnId,
     tab: 'Transactions',
     record: {
       txn_id: value.txnId,
-      created_at: now(),
+      created_at: value.createdAt!,
       date: value.date,
       amount: pesos(value.amount),
       merchant: value.merchant,
@@ -40,13 +40,13 @@ export type TransferInput = { date: IsoDate; fromAccount: string; toAccount: str
 
 export function addTransfer(sheetId: string, input: TransferInput): Transfer {
   if (input.fromAccount === input.toAccount) throw new Error('Choose two different accounts.')
-  const value: Transfer = { transferId: newId(), ...input }
+  const value: Transfer = { transferId: newId(), ...input, createdAt: now() }
   enqueue(sheetId, {
     key: value.transferId,
     tab: 'Transfers',
     record: {
       transfer_id: value.transferId,
-      created_at: now(),
+      created_at: value.createdAt!,
       date: value.date,
       from_account: value.fromAccount,
       to_account: value.toAccount,
@@ -61,13 +61,13 @@ export function addTransfer(sheetId: string, input: TransferInput): Transfer {
 export type PaymentInput = { date: IsoDate; cardId: string; amount: Centavos; fromAccount: string; note: string }
 
 export function addPayment(sheetId: string, input: PaymentInput): Payment {
-  const value: Payment = { payId: newId(), date: input.date, cardId: input.cardId, amount: input.amount, fromAccount: input.fromAccount }
+  const value: Payment = { payId: newId(), date: input.date, cardId: input.cardId, amount: input.amount, fromAccount: input.fromAccount, createdAt: now() }
   enqueue(sheetId, {
     key: value.payId,
     tab: 'Payments',
     record: {
       pay_id: value.payId,
-      created_at: now(),
+      created_at: value.createdAt!,
       date: value.date,
       card_id: value.cardId,
       amount: pesos(value.amount),
@@ -83,13 +83,13 @@ export function addPayment(sheetId: string, input: PaymentInput): Payment {
 export type IncomeInput = { date: IsoDate; sourceId: string; type: IncomeType; amount: Centavos; toAccount: string; note: string }
 
 export function addIncome(sheetId: string, input: IncomeInput): IncomeEntry {
-  const value: IncomeEntry = { incomeId: newId(), ...input }
+  const value: IncomeEntry = { incomeId: newId(), ...input, createdAt: now() }
   enqueue(sheetId, {
     key: value.incomeId,
     tab: 'IncomeLog',
     record: {
       income_id: value.incomeId,
-      created_at: now(),
+      created_at: value.createdAt!,
       date: value.date,
       source_id: value.sourceId,
       type: value.type,
@@ -265,7 +265,7 @@ export async function saveExpense(sheetId: string, wb: Workbook, txn: Transactio
   )
 }
 
-export const VOID_REASONS = ['Did not happen', 'Entered by mistake'] as const
+export const VOID_REASONS = ['Entered twice', 'Did not happen', 'Entered by mistake'] as const
 export type VoidReason = (typeof VOID_REASONS)[number]
 
 /** voided_at and void_reason cells of one row. The row stays in the sheet; the app ignores it. */
@@ -313,6 +313,20 @@ export async function voidLine(sheetId: string, wb: Workbook, line: StatementLin
   const card = wb.cards.find((c) => c.cardId === line.cardId)
   const cells = voidCells(wb, card?.sheetTab ?? '', line.row, reason)
   await lineTab(sheetId, wb, line, token)
+  await updateCells(sheetId, cells, token)
+}
+
+/** Voids a move, money in, or card payment (e.g. entered twice). Both balances go back. */
+export async function voidEntry(
+  sheetId: string,
+  wb: Workbook,
+  entry: { tab: 'Transfers' | 'IncomeLog' | 'Payments'; id: string; row?: number },
+  reason: VoidReason,
+  token: string,
+) {
+  const idColumn = { Transfers: 'transfer_id', IncomeLog: 'income_id', Payments: 'pay_id' }[entry.tab]
+  const cells = voidCells(wb, entry.tab, entry.row ?? 0, reason)
+  await checkRow(sheetId, entry.tab, idColumn, entry.row, entry.id, token)
   await updateCells(sheetId, cells, token)
 }
 
@@ -469,6 +483,7 @@ export async function addAccount(sheetId: string, wb: Workbook, account: NewAcco
     opening_date: account.openingDate,
     is_savings: account.isSavings,
     active: true,
+    created_at: now(),
     maintaining_balance: account.maintainingBalance ? pesos(account.maintainingBalance) : '',
   })
   await appendRows(sheetId, 'Accounts', [row], token)
