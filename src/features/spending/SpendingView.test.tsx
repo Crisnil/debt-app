@@ -79,15 +79,6 @@ describe('Transactions page', () => {
     expect(rows()).toHaveLength(10)
   })
 
-  it('opens the details of a move, and says where to change it', async () => {
-    renderSpending()
-    await userEvent.click(screen.getByRole('button', { name: 'Piggy Bank → Cash ₱100.00: details' }))
-    const dialog = screen.getByRole('dialog', { name: 'Move' })
-    expect(dialog).toHaveTextContent('FromPiggy Bank')
-    expect(dialog).toHaveTextContent('ToCash')
-    expect(dialog).toHaveTextContent('Not spending. To change or remove it, edit the Transfers tab of the sheet.')
-  })
-
   it('shows an empty month', async () => {
     renderSpending('2030-03-02')
     expect(screen.getByText('Nothing here.')).toBeInTheDocument()

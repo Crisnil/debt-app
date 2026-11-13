@@ -10,7 +10,7 @@ import { formatPeso } from '../../lib/money'
 import { monthLabel, OTHER_COLOR, STATUS } from '../../ui/charts/palette'
 import { Field, Select, SuccessNote } from '../../ui/form'
 import { Modal } from '../../ui/Modal'
-import { ItemDialogBody } from './ItemDialog'
+import { EntryVoid, ItemDialogBody } from './ItemDialog'
 import { WithWorkbook } from '../WithWorkbook'
 
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
@@ -123,8 +123,8 @@ function EntryList({ workbook, list, onOpen }: { workbook: Workbook; list: Entry
   )
 }
 
-/** A move, money in, or card payment. The app cannot change these yet, so the dialog says where to. */
-function EntryDetails({ workbook, entry: e }: { workbook: Workbook; entry: Entry }) {
+/** A move, money in, or card payment: its details, and void (e.g. entered twice). Other changes are made in the sheet. */
+function EntryDetails({ workbook, entry: e, onSaved }: { workbook: Workbook; entry: Entry; onSaved: (message: string) => void }) {
   const from = e.kind === 'in' ? e.label : accountLabel(workbook, e.from)
   return (
     <div className="space-y-3 text-sm">
@@ -146,7 +146,8 @@ function EntryDetails({ workbook, entry: e }: { workbook: Workbook; entry: Entry
           </>
         )}
       </dl>
-      <p className="text-slate-600">Not spending. To change or remove it, edit the {e.tab} tab of the sheet.</p>
+      <p className="text-slate-600">Not spending. To change it, edit the {e.tab} tab of the sheet.</p>
+      {e.ref && <EntryVoid entry={e.ref} label={e.label} onSaved={onSaved} />}
     </div>
   )
 }
@@ -278,7 +279,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
               </button>
             )}
           </h2>
-          <p className="mb-2 text-xs text-slate-500">Tap a purchase to correct or void it, or any other entry to see its details.</p>
+          <p className="mb-2 text-xs text-slate-500">Tap an entry to see it, correct it, or void it.</p>
           <SuccessNote message={saved} />
           <EntryList
             workbook={workbook}
@@ -302,7 +303,17 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
             }}
           />
         ) : (
-          open && <EntryDetails workbook={workbook} entry={open} />
+          open && (
+            <EntryDetails
+              key={open.key}
+              workbook={workbook}
+              entry={open}
+              onSaved={(message) => {
+                setOpen(null)
+                setSaved(message)
+              }}
+            />
+          )
         )}
       </Modal>
     </section>

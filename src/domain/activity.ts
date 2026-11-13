@@ -24,7 +24,11 @@ export type Entry = {
   /** The sheet tab to change or remove the entry, when the app cannot. */
   tab: string
   item?: SpendingItem
+  /** The row of a move, money in, or card payment, to void it. */
+  ref?: EntryRef
 }
+
+export type EntryRef = { tab: 'Transfers' | 'IncomeLog' | 'Payments'; id: string; row?: number }
 
 const INCOME_TYPE: Partial<Record<IncomeType, string>> = { gift: 'Gift', repayment: 'Paid back', bonus: 'Bonus', '13th_month': '13th month', allowance: 'Allowance' }
 
@@ -48,7 +52,18 @@ export function entries(wb: Workbook): Entry[] {
   for (const i of wb.incomeLog) {
     if (i.type === 'ewallet_return' || i.amount === 0) continue
     const source = wb.incomeSources.find((s) => s.sourceId === i.sourceId)?.label ?? INCOME_TYPE[i.type] ?? (i.sourceId || 'Income')
-    list.push({ key: `i-${i.incomeId}`, kind: 'in', date: i.date, amount: i.amount, label: source, from: i.sourceId, to: i.toAccount, note: i.note, tab: 'IncomeLog' })
+    list.push({
+      key: `i-${i.incomeId}`,
+      kind: 'in',
+      date: i.date,
+      amount: i.amount,
+      label: source,
+      from: i.sourceId,
+      to: i.toAccount,
+      note: i.note,
+      tab: 'IncomeLog',
+      ref: { tab: 'IncomeLog', id: i.incomeId, row: i.row },
+    })
   }
   for (const t of wb.transfers) {
     list.push({
@@ -61,10 +76,22 @@ export function entries(wb: Workbook): Entry[] {
       to: t.toAccount,
       note: t.note,
       tab: 'Transfers',
+      ref: { tab: 'Transfers', id: t.transferId, row: t.row },
     })
   }
   for (const p of wb.payments) {
-    list.push({ key: `c-${p.payId}`, kind: 'payment', date: p.date, amount: p.amount, label: `${accountLabel(wb, p.cardId)} payment`, from: p.fromAccount, to: p.cardId, note: '', tab: 'Payments' })
+    list.push({
+      key: `c-${p.payId}`,
+      kind: 'payment',
+      date: p.date,
+      amount: p.amount,
+      label: `${accountLabel(wb, p.cardId)} payment`,
+      from: p.fromAccount,
+      to: p.cardId,
+      note: '',
+      tab: 'Payments',
+      ref: { tab: 'Payments', id: p.payId, row: p.row },
+    })
   }
   // Stable sort: purchases keep their order within a day.
   return list.sort((a, b) => b.date.localeCompare(a.date))

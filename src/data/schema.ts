@@ -29,8 +29,11 @@ export type OptionalTab = keyof typeof OPTIONAL_TABS
 /** Columns the app can add at the end of an existing tab. */
 export const OPTIONAL_COLUMNS: Record<string, readonly string[]> = {
   Cards: ['credit_limit'],
-  Accounts: ['maintaining_balance'],
+  Accounts: ['maintaining_balance', 'created_at'],
   Transactions: ['payable_id', 'payable_month', 'voided_at', 'void_reason'],
+  Transfers: ['voided_at', 'void_reason'],
+  IncomeLog: ['voided_at', 'void_reason'],
+  Payments: ['created_at', 'voided_at', 'void_reason'],
   PlannedExpenses: ['payable_id'],
   BalanceChecks: ['voided_at', 'void_reason'],
 }

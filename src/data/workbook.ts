@@ -144,13 +144,16 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
     snapshots,
     lines,
     payments: rowsToObjects(values.Payments)
-      .filter((r) => text(r.card_id) && isoDate(r.date))
+      // A voided entry (entered twice, did not happen, or by mistake) stays in the sheet; the app ignores it.
+      .filter((r) => text(r.card_id) && isoDate(r.date) && !text(r.voided_at))
       .map((r) => ({
         payId: text(r.pay_id),
         date: isoDate(r.date),
         cardId: text(r.card_id),
         amount: money(r.amount),
         fromAccount: text(r.from_account),
+        createdAt: text(r.created_at),
+        row: r.__row,
       })),
     categories: rowsToObjects(values.Categories)
       .filter((r) => text(r.category))
@@ -169,6 +172,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
           isSavings: bool(r.is_savings),
           active: bool(r.active),
           maintainingBalance: money(r.maintaining_balance),
+          createdAt: text(r.created_at),
           row: r.__row,
         }
       }),
@@ -185,10 +189,11 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         note: text(r.note),
         payableId: text(r.payable_id),
         payableMonth: yearMonth(r.payable_month),
+        createdAt: text(r.created_at),
         row: r.__row,
       })),
     transfers: rowsToObjects(values.Transfers)
-      .filter((r) => isoDate(r.date) && text(r.from_account) && text(r.to_account))
+      .filter((r) => isoDate(r.date) && text(r.from_account) && text(r.to_account) && !text(r.voided_at))
       .map((r) => ({
         transferId: text(r.transfer_id),
         date: isoDate(r.date),
@@ -196,6 +201,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         toAccount: text(r.to_account),
         amount: money(r.amount),
         note: text(r.note),
+        createdAt: text(r.created_at),
+        row: r.__row,
       })),
     incomeSources: rowsToObjects(values.Income)
       .filter((r) => text(r.source_id))
@@ -211,7 +218,7 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
         row: r.__row,
       })),
     incomeLog: rowsToObjects(values.IncomeLog)
-      .filter((r) => isoDate(r.date))
+      .filter((r) => isoDate(r.date) && !text(r.voided_at))
       .map((r) => {
         const type = text(r.type) as IncomeType
         return {
@@ -222,6 +229,8 @@ export function parseWorkbook(title: string, availableTabs: readonly string[], v
           amount: money(r.amount),
           toAccount: text(r.to_account),
           note: text(r.note),
+          createdAt: text(r.created_at),
+          row: r.__row,
         }
       }),
   }

@@ -4,20 +4,34 @@ import type { Account, BalanceCheck, IsoDate, Workbook } from './types'
 
 export type AccountBalance = { account: Account; balance: Centavos }
 
-/** Money in − money out of the account for entries dated after `after` (when set) up to `upTo` (when set). */
-function moved(wb: Workbook, id: string, after: IsoDate, upTo = ''): Centavos {
-  const inRange = (date: IsoDate) => (!after || date > after) && (!upTo || date <= upTo)
+/** A moment a balance is known: its date, and when it was typed (ISO time, '' when unknown). */
+type Point = { date: IsoDate; createdAt: string }
+
+/**
+ * An entry is after a point when its date is later, or on the same date when it was typed later.
+ * Without both times, an entry on the same date is not after: the balance typed that day is taken to include it.
+ */
+function isAfter(date: IsoDate, createdAt: string | undefined, point: Point): boolean {
+  return date > point.date || (date === point.date && Boolean(createdAt) && Boolean(point.createdAt) && createdAt! > point.createdAt)
+}
+
+/** Money in − money out of the account for entries after `after` (when set) up to `upTo` (when set). */
+function moved(wb: Workbook, id: string, after?: Point, upTo?: Point): Centavos {
+  const inRange = (date: IsoDate, createdAt?: string) => (!after || isAfter(date, createdAt, after)) && (!upTo || !isAfter(date, createdAt, upTo))
   let sum = 0
-  for (const i of wb.incomeLog) if (i.toAccount === id && inRange(i.date)) sum += i.amount
+  for (const i of wb.incomeLog) if (i.toAccount === id && inRange(i.date, i.createdAt)) sum += i.amount
   for (const t of wb.transfers) {
-    if (!inRange(t.date)) continue
+    if (!inRange(t.date, t.createdAt)) continue
     if (t.toAccount === id) sum += t.amount
     if (t.fromAccount === id) sum -= t.amount
   }
-  for (const e of wb.transactions) if (e.methodId === id && inRange(e.date)) sum -= e.amount
-  for (const p of wb.payments) if (p.fromAccount === id && inRange(p.date)) sum -= p.amount
+  for (const e of wb.transactions) if (e.methodId === id && inRange(e.date, e.createdAt)) sum -= e.amount
+  for (const p of wb.payments) if (p.fromAccount === id && inRange(p.date, p.createdAt)) sum -= p.amount
   return sum
 }
+
+/** The opening balance's point: the opening date, and when the account was added. None without an opening date. */
+const opening = (account: Account): Point | undefined => (account.openingDate ? { date: account.openingDate, createdAt: account.createdAt } : undefined)
 
 /** Balance checks of the account from its opening date, oldest first. Same day: the last one typed wins. */
 function checksFor(wb: Workbook, account: Account): BalanceCheck[] {
@@ -30,7 +44,8 @@ function checksFor(wb: Workbook, account: Account): BalanceCheck[] {
 }
 
 /**
- * Balance = the last balance check (or the opening balance) + money in − money out after its date.
+ * Balance = the last balance check (or the opening balance) + money in − money out after it: a later date, or the
+ * same date and typed after it.
  * Money in: income, transfers in. Money out: expenses paid from the account, transfers out, card payments.
  */
 export function accountBalances(wb: Workbook): AccountBalance[] {
@@ -38,7 +53,7 @@ export function accountBalances(wb: Workbook): AccountBalance[] {
     .filter((a) => a.active)
     .map((account) => {
       const last = checksFor(wb, account).at(-1)
-      const balance = last ? last.balance + moved(wb, account.accountId, last.date) : account.openingBalance + moved(wb, account.accountId, account.openingDate)
+      const balance = last ? last.balance + moved(wb, account.accountId, last) : account.openingBalance + moved(wb, account.accountId, opening(account))
       return { account, balance }
     })
 }
@@ -59,14 +74,14 @@ export function checkResults(wb: Workbook): CheckResult[] {
   const results: CheckResult[] = []
   for (const account of moneyAccounts(wb)) {
     let start = account.openingBalance
-    let from = account.openingDate
+    let from = opening(account)
     for (const check of checksFor(wb, account)) {
-      const expected = start + moved(wb, account.accountId, from, check.date)
+      const expected = start + moved(wb, account.accountId, from, check)
       const difference = check.balance - expected
       const counts = check.countDifference && difference < 0
       results.push({ check, account, expected, difference, notRecorded: counts ? -difference : 0 })
       start = check.balance
-      from = check.date
+      from = check
     }
   }
   return results.sort((a, b) => b.check.date.localeCompare(a.check.date) || b.check.createdAt.localeCompare(a.check.createdAt))
