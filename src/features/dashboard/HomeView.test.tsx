@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -25,7 +25,21 @@ describe('Home', () => {
     expect(screen.getByText('👋 Welcome Sample!')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '+ Add expense' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '+ Add savings' })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Check balances' })[0]).toHaveAttribute('href', '/balances')
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+  })
+
+  it('shows alerts behind the bell: bills due soon with Pay, and the count', async () => {
+    renderHome(base, '2030-01-29')
+    const bell = screen.getByRole('button', { name: /^Alerts \(\d+\)$/ })
+    expect(screen.queryByRole('dialog', { name: 'Alerts' })).not.toBeInTheDocument()
+    await userEvent.click(bell)
+    expect(within(screen.getByRole('dialog', { name: 'Alerts' })).getByRole('link', { name: 'Pay Alpha' })).toHaveAttribute('href', '/add?type=pay&card=alpha')
+  })
+
+  it('says so behind the bell when there is nothing to see', async () => {
+    renderHome({ ...base, cards: [], payables: [] })
+    await userEvent.click(screen.getByRole('button', { name: 'Alerts' }))
+    expect(screen.getByText('No alerts ✓')).toBeInTheDocument()
   })
 
   it('compares what we owe with savings, with details on request', async () => {
@@ -61,13 +75,19 @@ describe('Home', () => {
     expect(screen.getByRole('link', { name: 'Check now' })).toHaveAttribute('href', '/balances')
   })
 
-  it('shows what we have, grouped Debit and Cash, with savings goal and spendable now', () => {
+  it('shows swipe cards: spendable now, each account (Debit, then Cash), then each credit card', () => {
     renderHome()
-    expect(screen.getByRole('heading', { name: 'What we have' })).toBeInTheDocument()
-    expect(screen.getByText(/Savings goal: .* Spendable now/)).toBeInTheDocument()
-    expect(screen.getByText('Piggy Bank · savings goal')).toBeInTheDocument()
-    expect(screen.getByText('Debit')).toBeInTheDocument()
-    expect(screen.getAllByText('Cash').length).toBeGreaterThan(1) // the group heading and the account
+    const cards = within(screen.getByRole('heading', { name: 'Accounts and cards' }).nextElementSibling as HTMLElement).getAllByRole('listitem')
+    expect(cards.map((c) => c.textContent!.split('₱')[0])).toEqual(['Spendable now', 'Payroll · Debit', 'Piggy Bank · Debitsavings goal', 'Cash · Cash', 'Alpha · Credit', 'Beta · Credit'])
+    expect(cards[0]).toHaveTextContent(/Savings goal ₱5,200\.00 · Total/)
+    expect(cards[2]).toHaveTextContent('₱5,200.00')
+  })
+
+  it('opens an account card on its transactions, Update balance on its balance check, and a credit card on its page', () => {
+    renderHome()
+    expect(screen.getByRole('link', { name: 'Payroll · Debit' })).toHaveAttribute('href', '/transactions?account=payroll')
+    expect(screen.getByRole('link', { name: 'Update balance of Payroll' })).toHaveAttribute('href', '/balances?account=payroll')
+    expect(screen.getByRole('link', { name: 'Alpha · Credit' })).toHaveAttribute('href', '/cards/alpha')
   })
 
   it('lists what is due next with a Pay button, and this month; What we owe is on Plan', () => {
@@ -77,12 +97,6 @@ describe('Home', () => {
     expect(screen.queryByRole('heading', { name: 'What we owe' })).not.toBeInTheDocument()
     expect(screen.getByText('Income (plan)')).toBeInTheDocument()
     expect(screen.getByText('Interest (est.)')).toBeInTheDocument()
-  })
-
-  it('shows each balance as a number, and the total', () => {
-    renderHome()
-    const have = screen.getByRole('heading', { name: 'What we have' }).closest('div')!.parentElement!
-    expect(have).toHaveTextContent('Piggy Bank · savings goal₱5,200.00')
   })
 
   it('says when nothing is due', () => {

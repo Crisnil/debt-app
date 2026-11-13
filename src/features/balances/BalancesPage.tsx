@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { addBalanceCheck } from '../../data/actions'
 import { moneyAccounts } from '../../domain/accounts'
 import { accountBalances, checkResults, type CheckResult } from '../../domain/balances'
@@ -113,10 +113,15 @@ function History({ workbook }: { workbook: Workbook }) {
   )
 }
 
-/** Monthly balance check: type the real balance of each account. The difference shows as Not recorded. */
-export function BalancesView({ sheetId, workbook, today }: { sheetId: string; workbook: Workbook; today: IsoDate }) {
+/**
+ * Monthly balance check: type the real balance of each account. The difference shows as Not recorded.
+ * `only`: show just this account (Home cards link here with ?account=), with a link to all of them.
+ */
+export function BalancesView({ sheetId, workbook, today, only = '' }: { sheetId: string; workbook: Workbook; today: IsoDate; only?: string }) {
   const [date, setDate] = useState(today)
-  const accounts = moneyAccounts(workbook).filter((a) => a.active)
+  const active = moneyAccounts(workbook).filter((a) => a.active)
+  const one = active.find((a) => a.accountId === only)
+  const accounts = one ? [one] : active
   const balances = new Map(accountBalances(workbook).map((b) => [b.account.accountId, b.balance]))
 
   if (workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)) {
@@ -152,6 +157,11 @@ export function BalancesView({ sheetId, workbook, today }: { sheetId: string; wo
             <AccountCheck key={a.accountId} sheetId={sheetId} workbook={workbook} account={a} appBalance={balances.get(a.accountId) ?? 0} date={date} />
           ))}
         </ul>
+        {one && (
+          <Link to="/balances" className="mt-4 inline-block text-sm text-green-900 underline">
+            Check all accounts
+          </Link>
+        )}
       </div>
       <History workbook={workbook} />
     </section>
@@ -159,5 +169,7 @@ export function BalancesView({ sheetId, workbook, today }: { sheetId: string; wo
 }
 
 export function BalancesPage() {
-  return <WithWorkbook title="Check balances">{(sheetId, workbook) => <BalancesView sheetId={sheetId} workbook={workbook} today={todayIso()} />}</WithWorkbook>
+  const [params] = useSearchParams()
+  const only = params.get('account') ?? ''
+  return <WithWorkbook title="Check balances">{(sheetId, workbook) => <BalancesView sheetId={sheetId} workbook={workbook} today={todayIso()} only={only} />}</WithWorkbook>
 }

@@ -56,4 +56,15 @@ describe('Check balances', () => {
     expect(screen.getByRole('heading', { name: 'Past checks' })).toBeInTheDocument()
     expect(screen.getByText('₱50.00 less than the app: counted as Not recorded spending.')).toBeInTheDocument()
   })
+
+  it('shows just one account from the Home card link, with a link to all of them', () => {
+    render(
+      <MemoryRouter>
+        <BalancesView sheetId="s" workbook={withTab()} today="2030-01-21" only="payroll" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText('Real balance of Payroll (₱)')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Real balance of Cash (₱)')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Check all accounts' })).toHaveAttribute('href', '/balances')
+  })
 })

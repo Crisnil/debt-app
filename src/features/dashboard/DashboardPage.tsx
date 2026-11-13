@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { daysBetween, todayIso } from '../../domain/dues'
 import { forecastCards } from '../../domain/forecast'
 import { debtGauge, debtHealth, savingsGauge, savingsHealth, spendingGauge, spendingHealth, type Health } from '../../domain/health'
-import { carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
+import { BADGE_DAYS, carriedAlerts, dueItems, nextDrop, owedParts, savingsParts, thisMonth } from '../../domain/home'
 import { monthsUntil, payoffPaths } from '../../domain/payoff'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
@@ -14,7 +14,8 @@ import { Donut } from '../../ui/charts/Donut'
 import { cardColor, monthLabel, STATUS } from '../../ui/charts/palette'
 import { ErrorNote } from '../../ui/ErrorNote'
 import { useAction } from '../../ui/useAction'
-import { PaydayReminders, WhatWeHave } from './MoneyCards'
+import { HeroCards } from './HeroCards'
+import { PaydayReminders } from './MoneyCards'
 import { SetupChecklist } from './SetupChecklist'
 
 /** Due items this close are shown in amber. */
@@ -93,17 +94,53 @@ function Progress({ workbook, owed, today, debtFree }: { workbook: Workbook; owe
   )
 }
 
-/** Cards with a balance carried to the next bill, and the interest it costs. Due bills are in Due next. */
-function Alerts({ forecasts }: { forecasts: ReturnType<typeof forecastCards> }) {
+/** 🔔 with the number of alerts: bills late or due in the next BADGE_DAYS days, and card balances carried to the next bill. */
+function Bell({ workbook, forecasts, today }: { workbook: Workbook; forecasts: ReturnType<typeof forecastCards>; today: IsoDate }) {
+  const [open, setOpen] = useState(false)
+  const due = dueItems(workbook, forecasts, today, BADGE_DAYS)
   const carried = carriedAlerts(forecasts)
-  if (carried.length === 0) return null
+  const count = due.length + carried.length
   return (
-    <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-      {carried.map((c) => (
-        <p key={c.cardId}>
-          ! <b>{c.name}:</b> {formatPeso(c.carried)} carried, about {formatPeso(c.interest)} interest on the {c.statementDate} bill.
-        </p>
-      ))}
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={count > 0 ? `Alerts (${count})` : 'Alerts'}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="relative rounded-full p-2 text-slate-700 hover:bg-slate-100"
+      >
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+        {count > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-5 rounded-full bg-red-700 px-1 text-center text-xs leading-5 font-semibold text-white" aria-hidden="true">
+            {count}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Alerts" className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl bg-white p-3 text-sm shadow-lg ring-1 ring-slate-200">
+          {count === 0 && <p className="text-slate-600">No alerts ✓</p>}
+          <ul className="divide-y divide-slate-100">
+            {due.map((d) => (
+              <li key={d.key} className="flex items-center justify-between gap-3 py-2">
+                <span className={d.dueDate < today ? 'text-red-800' : 'text-amber-900'}>
+                  {d.dueDate < today ? '▲ ' : '! '}
+                  <b>{d.name}</b> {formatPeso(d.amount)} · {dueIn(today, d.dueDate)}
+                </span>
+                <Link to={d.to} aria-label={`Pay ${d.name}`} className="shrink-0 text-green-900 underline">
+                  Pay
+                </Link>
+              </li>
+            ))}
+            {carried.map((c) => (
+              <li key={c.cardId} className="py-2 text-amber-900">
+                ! <b>{c.name}:</b> {formatPeso(c.carried)} carried, about {formatPeso(c.interest)} interest on the {c.statementDate} bill.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -330,17 +367,26 @@ export function HomeView({ sheetId, workbook, today, refresh }: { sheetId: strin
   const owed = owedParts(workbook, forecasts, today)
   const name = workbook.settings.display_name?.value
   return (
-    <section className="mx-auto max-w-4xl space-y-4">
+    <section className="mx-auto max-w-5xl space-y-4">
       <h1 className="sr-only">Dashboard</h1>
-      <p className="text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
+      <header className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-2xl font-semibold text-slate-900">👋 Welcome{name ? ` ${name}` : ' back'}!</p>
+        <div className="flex shrink-0 items-center">
+          <Bell workbook={workbook} forecasts={forecasts} today={today} />
+          {/* Wide screens have Settings in the sidebar. */}
+          <Link to="/settings" aria-label="Settings" className="rounded-full p-2 text-slate-700 hover:bg-slate-100 lg:hidden">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </Link>
+        </div>
+      </header>
+      <HeroCards workbook={workbook} forecasts={forecasts} today={today} refresh={refresh} />
+      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
       <SetupChecklist workbook={workbook} />
       <PaydayReminders sheetId={sheetId} workbook={workbook} today={today} />
-      <Alerts forecasts={forecasts} />
-      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-        <WhatWeHave workbook={workbook} today={today} refresh={refresh} />
-        <DueNext workbook={workbook} forecasts={forecasts} today={today} />
-      </div>
-      <Progress workbook={workbook} owed={owed} today={today} debtFree={payoffPaths(workbook, today).main.debtFree} />
+      <DueNext workbook={workbook} forecasts={forecasts} today={today} />
       <ThisMonthRow workbook={workbook} forecasts={forecasts} today={today} />
     </section>
   )
