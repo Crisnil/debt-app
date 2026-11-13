@@ -87,8 +87,8 @@ export function SettingsPage() {
           </div>
 
           {sheet && signedIn && (
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <h2 className="font-medium text-slate-900">Sheet check</h2>
+            <details className="rounded-xl bg-white p-4 shadow-sm" open={Boolean(workbook.error)}>
+              <summary className="cursor-pointer font-medium text-slate-900">Advanced: sheet check</summary>
               {workbook.isPending && <p className="mt-1 text-sm text-slate-600">Reading the sheet…</p>}
               {workbook.error instanceof SchemaError && (
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-800">
@@ -112,10 +112,10 @@ export function SettingsPage() {
                   <li>✓ {workbook.data.transactions.length} expenses</li>
                   <li>✓ {workbook.data.transfers.length} money moves</li>
                   <li>✓ {workbook.data.incomeLog.length} income entries</li>
-                  <li>✓ {workbook.data.payables.length} payables</li>
+                  <li>✓ {workbook.data.payables.length} bills</li>
                 </ul>
               )}
-            </div>
+            </details>
           )}
         </div>
         <div className="space-y-6">

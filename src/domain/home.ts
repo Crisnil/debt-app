@@ -58,12 +58,12 @@ export function dueItems(wb: Workbook, forecasts: CardForecast[], today: IsoDate
     for (const b of f.bills) {
       if (b.total <= 0 || daysBetween(today, b.bill.dueDate) > days) continue
       const detail = b.statementLeft ? 'left on the statement' : b.fromStatement ? 'statement lines in' : 'estimate'
-      items.push({ key: `${f.card.cardId}-${b.bill.statementDate}`, name: f.card.name, detail, amount: b.total, dueDate: b.bill.dueDate, to: `/cards/${f.card.cardId}?tab=pay` })
+      items.push({ key: `${f.card.cardId}-${b.bill.statementDate}`, name: f.card.name, detail, amount: b.total, dueDate: b.bill.dueDate, to: `/add?type=pay&card=${f.card.cardId}` })
     }
   }
   for (const c of summarizeDues(wb, today).cards) {
     if (c.status === 'overdue' && c.snapshot) {
-      items.push({ key: `${c.card.cardId}-late`, name: c.card.name, detail: 'left on the statement', amount: c.remainingDue, dueDate: c.snapshot.dueDate, to: `/cards/${c.card.cardId}?tab=pay` })
+      items.push({ key: `${c.card.cardId}-late`, name: c.card.name, detail: 'left on the statement', amount: c.remainingDue, dueDate: c.snapshot.dueDate, to: `/add?type=pay&card=${c.card.cardId}` })
     }
   }
   for (const m of payableMonths(wb, addMonths(today.slice(0, 7), 2))) {

@@ -228,7 +228,7 @@ export function AddPayableForm({ sheetId, workbook, onSaved }: { sheetId: string
         <TextInput id="pb-note" value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
       <Button type="submit" className="w-full">
-        Add payable
+        Add bill
       </Button>
       <ErrorNote message={error} />
     </form>

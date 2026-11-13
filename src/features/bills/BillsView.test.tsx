@@ -107,11 +107,11 @@ describe('Bills table', () => {
 
   it('adds a payable in a pop-up', async () => {
     renderBills()
-    await userEvent.click(screen.getByRole('button', { name: '+ Add payable' }))
-    const dialog = screen.getByRole('dialog', { name: 'Add payable' })
+    await userEvent.click(screen.getByRole('button', { name: '+ Add bill' }))
+    const dialog = screen.getByRole('dialog', { name: 'Add bill' })
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Sample internet')
     await userEvent.type(within(dialog).getByLabelText('Usual amount per month (₱)'), '1500')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Add payable' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add bill' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('Added Sample internet.')).toBeInTheDocument()
   })

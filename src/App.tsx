@@ -6,6 +6,7 @@ import { CardPage } from './features/cards/CardPage'
 import { CardsPage } from './features/cards/CardsPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { BillsPage } from './features/bills/BillsPage'
+import { MorePage } from './features/MorePage'
 import { PlanPage } from './features/plan/PlanPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SpendingPage } from './features/spending/SpendingPage'
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/balances" element={<BalancesPage />} />
+            <Route path="/more" element={<MorePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

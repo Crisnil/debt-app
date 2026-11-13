@@ -7,6 +7,8 @@ import { formatPeso } from '../../lib/money'
 import { FutureBillsChart } from '../../ui/charts/FutureBillsChart'
 import { PayoffChart, type ChartPath } from '../../ui/charts/PayoffChart'
 import { cardColor, monthLabel } from '../../ui/charts/palette'
+import { owedParts } from '../../domain/home'
+import { Tiles, WhatWeOwe } from '../dashboard/DashboardPage'
 import { WithWorkbook } from '../WithWorkbook'
 import { PlannedExpenses } from './PlannedExpenses'
 
@@ -223,7 +225,7 @@ export function PayoffCard({ workbook, today }: { workbook: Workbook; today: str
   )
 }
 
-/** Looking ahead: bills per month for the next 12 months and when installments end. Later: the payoff path. */
+/** Looking ahead: what we owe, bills this month, the payoff path, planned expenses, bills per month, and when installments end. */
 export function PlanPage() {
   return (
     <WithWorkbook title="Plan">
@@ -233,6 +235,10 @@ export function PlanPage() {
         return (
           <section className="space-y-4">
             <h1 className="text-2xl font-semibold text-slate-900">Plan</h1>
+            <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6 lg:space-y-0">
+              <WhatWeOwe workbook={workbook} forecasts={forecasts} owed={owedParts(workbook, forecasts, today)} />
+              <Tiles workbook={workbook} forecasts={forecasts} today={today} />
+            </div>
             <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6 lg:space-y-0">
               <PayoffCard workbook={workbook} today={today} />
               <PlannedExpenses sheetId={sheetId} workbook={workbook} today={today} />
