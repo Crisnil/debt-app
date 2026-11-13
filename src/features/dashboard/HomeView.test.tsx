@@ -59,11 +59,13 @@ describe('Home', () => {
     expect(screen.getByRole('link', { name: 'Check now' })).toHaveAttribute('href', '/balances')
   })
 
-  it('shows what we have, with savings and spendable now', () => {
+  it('shows what we have, grouped Debit and Cash, with savings goal and spendable now', () => {
     renderHome()
     expect(screen.getByRole('heading', { name: 'What we have' })).toBeInTheDocument()
-    expect(screen.getByText(/Spendable now/)).toBeInTheDocument()
-    expect(screen.getByText('Piggy Bank · savings')).toBeInTheDocument()
+    expect(screen.getByText(/Savings goal: .* Spendable now/)).toBeInTheDocument()
+    expect(screen.getByText('Piggy Bank · savings goal')).toBeInTheDocument()
+    expect(screen.getByText('Debit')).toBeInTheDocument()
+    expect(screen.getAllByText('Cash').length).toBeGreaterThan(1) // the group heading and the account
   })
 
   it('shows what we owe, the next due item, and this month', () => {

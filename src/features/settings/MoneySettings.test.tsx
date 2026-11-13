@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveAccountOpening, saveCreditLimit } from '../../data/actions'
+import { saveAccount, saveCreditLimit } from '../../data/actions'
 import { parseWorkbook } from '../../data/workbook'
 import { SessionProvider } from '../../state/session'
 import { fixtureTabs, fixtureValues } from '../../test/fixtures'
@@ -11,7 +11,7 @@ import { MoneySettings } from './MoneySettings'
 
 vi.mock('../../data/actions', async (original) => ({
   ...(await original<typeof import('../../data/actions')>()),
-  saveAccountOpening: vi.fn(async () => {}),
+  saveAccount: vi.fn(async () => {}),
   saveCreditLimit: vi.fn(async () => {}),
 }))
 
@@ -67,14 +67,55 @@ describe('Settings lists', () => {
     renderSettings()
     await userEvent.click(screen.getByRole('button', { name: 'Edit Cash' }))
     const dialog = screen.getByRole('dialog', { name: 'Edit Cash' })
+    expect(within(dialog).getByLabelText('Name')).toHaveFocus()
     const field = within(dialog).getByLabelText('Starting balance (₱)')
-    expect(field).toHaveFocus()
     await userEvent.clear(field)
     await userEvent.type(field, '250')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saved Cash.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(saveAccountOpening).toHaveBeenCalledWith('s', base, expect.any(Number), 25000, '2030-01-01', 'tok', undefined)
+    expect(saveAccount).toHaveBeenCalledWith(
+      's',
+      base,
+      expect.any(Number),
+      { label: 'Cash', type: 'cash', isSavings: false, openingBalance: 25000, openingDate: '2030-01-01', maintainingBalance: 0 },
+      'tok',
+    )
+  })
+
+  it('groups the accounts as Debit, Credit, and Cash, with what is owed on each card', () => {
+    renderSettings()
+    const heads = screen.getAllByRole('columnheader').map((h) => h.textContent)
+    expect(heads.filter((h) => /^(Debit|Credit|E-wallet|Cash)/.test(h ?? '')).map((h) => h!.split('Home')[0])).toEqual(['Debit', 'Credit', 'Cash'])
+    expect(rowOf('Payroll')).toHaveTextContent('Debit')
+    expect(rowOf('Piggy Bank')).toHaveTextContent('savings goal')
+    expect(rowOf('Alpha limit')).toHaveTextContent(/₱[\d,.]+ owed/)
+  })
+
+  it('renames an account, changes its type, and ticks savings goal money', async () => {
+    renderSettings()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Payroll' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit Payroll' })
+    const name = within(dialog).getByLabelText('Name')
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Security Bank Payroll')
+    expect(within(dialog).getByLabelText('Type')).toHaveValue('bank')
+    await userEvent.selectOptions(within(dialog).getByLabelText('Type'), 'e-wallet')
+    await userEvent.click(within(dialog).getByLabelText(/Savings goal money/))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved Security Bank Payroll.')).toBeInTheDocument()
+    expect(saveAccount).toHaveBeenCalledWith('s', base, expect.any(Number), expect.objectContaining({ label: 'Security Bank Payroll', type: 'e-wallet', isSavings: true }), 'tok')
+  })
+
+  it('does not let an account take the name of another', async () => {
+    renderSettings()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Payroll' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit Payroll' })
+    await userEvent.clear(within(dialog).getByLabelText('Name'))
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'cash')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(within(dialog).getByText('This name is already used.')).toBeInTheDocument()
+    expect(saveAccount).not.toHaveBeenCalled()
   })
 
   it('keeps the pop-up open with the problem when the input is wrong', async () => {

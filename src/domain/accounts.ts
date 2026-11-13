@@ -1,4 +1,16 @@
-import type { Account, Card, Workbook } from './types'
+import type { Account, AccountType, Card, Workbook } from './types'
+
+/** What the app calls each account type. The sheet keeps "bank" for a debit account (payroll, savings, Maribank). */
+export const TYPE_LABEL: Record<AccountType, string> = { bank: 'Debit', 'e-wallet': 'E-wallet', cash: 'Cash', credit_card: 'Credit' }
+
+/** Money account types in the order they are listed: Debit, E-wallet, Cash. */
+export const MONEY_GROUPS: AccountType[] = ['bank', 'e-wallet', 'cash']
+
+/** Money accounts by group (Debit, E-wallet, Cash), each in sheet order. */
+export function byGroup<T>(items: T[], typeOf: (item: T) => AccountType): T[] {
+  const rank = (item: T) => MONEY_GROUPS.indexOf(typeOf(item))
+  return items.map((item, i) => ({ item, i })).sort((a, b) => rank(a.item) - rank(b.item) || a.i - b.i).map((x) => x.item)
+}
 
 /**
  * Old way: loading GCash or Maya was the expense. Now a load is a Move money transfer and purchases are expenses

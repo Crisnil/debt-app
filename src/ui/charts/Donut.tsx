@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { formatPeso } from '../../lib/money'
 import { OTHER_COLOR } from './palette'
 
-export type DonutPart = { id: string; name: string; amount: number; color: string; to?: string }
+/** group: a heading in the legend (e.g. "Debit"), shown with its total before its first part. Parts of a group come together. */
+export type DonutPart = { id: string; name: string; amount: number; color: string; to?: string; group?: string }
 
 const GAP = 0.5 // % of the ring left as white surface between parts (about 2px at this size)
 const MAX_PARTS = 6
@@ -14,7 +15,8 @@ function foldOther(parts: DonutPart[]): DonutPart[] {
   const keep = parts.length > MAX_PARTS ? colored.slice(0, MAX_PARTS - 1) : colored
   const rest = parts.filter((p) => !keep.includes(p))
   if (rest.length <= 1) return parts.length > MAX_PARTS ? [...keep, ...rest] : parts
-  return [...keep, { id: 'other', name: `Other: ${rest.map((p) => p.name).join(', ')}`, amount: rest.reduce((s, p) => s + p.amount, 0), color: OTHER_COLOR }]
+  const group = rest.every((p) => p.group === rest[0].group) ? rest[0].group : rest[0].group && 'Other'
+  return [...keep, { id: 'other', name: `Other: ${rest.map((p) => p.name).join(', ')}`, amount: rest.reduce((s, p) => s + p.amount, 0), color: OTHER_COLOR, group }]
 }
 
 /** Ring of parts with the total in the middle and a legend with the amounts. The legend carries every value. */
@@ -59,7 +61,14 @@ export function Donut({ parts: given, centerLabel, children }: { parts: DonutPar
         <div>
           {children}
           <ul className="divide-y divide-slate-100 text-sm">
-            {parts.map((p) => {
+            {parts.map((p, i) => {
+              const heading =
+                p.group && p.group !== parts[i - 1]?.group ? (
+                  <li key={`group-${p.group}`} className="flex items-center justify-between pt-3 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase first:pt-0">
+                    <span>{p.group}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPeso(parts.filter((q) => q.group === p.group).reduce((s, q) => s + q.amount, 0))}</span>
+                  </li>
+                ) : null
               const row = (
                 <>
                   <span className="flex items-center gap-2 text-slate-700">
@@ -71,7 +80,8 @@ export function Donut({ parts: given, centerLabel, children }: { parts: DonutPar
                   </b>
                 </>
               )
-              return (
+              return [
+                heading,
                 <li key={p.id}>
                   {p.to ? (
                     <Link to={p.to} className="flex items-center justify-between py-2">
@@ -80,8 +90,8 @@ export function Donut({ parts: given, centerLabel, children }: { parts: DonutPar
                   ) : (
                     <div className="flex items-center justify-between py-2">{row}</div>
                   )}
-                </li>
-              )
+                </li>,
+              ]
             })}
           </ul>
         </div>

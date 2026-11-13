@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useState, useSyncExternalStore } from 'react'
-import { addAccount, addIncomeSource, saveAccountOpening, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
+import { addAccount, addIncomeSource, saveAccount, saveCreditLimit, saveIncomeSource, saveSettings } from '../../data/actions'
 import { dayList } from '../../data/cells'
-import { accountLabel, moneyAccounts } from '../../domain/accounts'
+import { accountLabel, moneyAccounts, TYPE_LABEL } from '../../domain/accounts'
 import { incomeByMonth } from '../../domain/payday'
 import { monthLabel } from '../../ui/charts/palette'
 import { accountBalances } from '../../domain/balances'
 import { todayIso } from '../../domain/dues'
+import { forecastCards } from '../../domain/forecast'
 import type { Account, Card, IncomeSource, Workbook } from '../../domain/types'
 import { formatPeso, toPesos } from '../../lib/money'
 import { canInstall, isInstalled, promptInstall, subscribeInstall } from '../../pwa/install'
@@ -175,62 +176,55 @@ function IncomeTable({ workbook }: { workbook: Workbook }) {
 
 // ---- accounts -------------------------------------------------------------
 
-const TYPE_LABEL: Record<string, string> = { bank: 'Bank', cash: 'Cash', 'e-wallet': 'E-wallet' }
+const MONEY_TYPES = ['bank', 'e-wallet', 'cash'] as const
+type MoneyType = (typeof MONEY_TYPES)[number]
 
-/** Add an account, or edit the starting balance and maintaining balance of one. */
+/** Add an account, or edit one: name, type, savings goal tick, starting balance, and maintaining balance. */
 function AccountForm({ workbook, account, onSaved }: { workbook: Workbook; account: Account | null; onSaved: (message: string) => void }) {
   const edit = useSheetEdit()
   const canMaintain = (workbook.headers.Accounts ?? []).includes('maintaining_balance')
-  const [label, setLabel] = useState('')
-  const [type, setType] = useState<'bank' | 'cash' | 'e-wallet'>('bank')
-  const [isSavings, setIsSavings] = useState(false)
+  const [label, setLabel] = useState(account?.label ?? '')
+  const [type, setType] = useState<MoneyType>(MONEY_TYPES.find((t) => t === account?.type) ?? 'bank')
+  const [isSavings, setIsSavings] = useState(account?.isSavings ?? false)
   const [opening, setOpening] = useState(account ? toPesos(account.openingBalance).toFixed(2) : '')
   const [date, setDate] = useState(account?.openingDate || todayIso())
   const [maintaining, setMaintaining] = useState(account?.maintainingBalance ? toPesos(account.maintainingBalance).toFixed(2) : '')
-  const accountType = account?.type ?? type
 
   async function save() {
+    const name = label.trim()
     const cents = pesoCents(opening)
     const keep = pesoCents(maintaining)
-    if (account) {
-      if (opening.trim() === '' || !Number.isFinite(cents)) return edit.fail('Enter a valid amount.')
-      if (!Number.isFinite(keep) || keep < 0) return edit.fail('Enter a valid maintaining balance, or leave it empty.')
-      const message = `Saved ${account.label}.`
-      const ok = await edit.run(message, (sheetId, wb, token) => saveAccountOpening(sheetId, wb, account.row, cents, date, token, canMaintain ? keep : undefined))
-      if (ok) onSaved(message)
-      return
-    }
-    if (!label.trim()) return edit.fail('Enter a name, for example "BPI Savings".')
+    if (!name) return edit.fail('Enter a name, for example "BPI Savings".')
+    if (account && opening.trim() === '') return edit.fail('Enter a valid amount.')
     if (!Number.isFinite(cents) || !Number.isFinite(keep) || keep < 0) return edit.fail('Enter valid amounts.')
-    if (workbook.accounts.some((a) => a.label.toLowerCase() === label.trim().toLowerCase())) return edit.fail('This name is already used.')
-    const message = `Added ${label.trim()}.`
-    const ok = await edit.run(message, (sheetId, wb, token) =>
-      addAccount(sheetId, wb, { label: label.trim(), type, isSavings, openingBalance: cents, openingDate: date, maintainingBalance: type === 'bank' ? keep : 0 }, token),
-    )
+    if (workbook.accounts.some((a) => a.accountId !== account?.accountId && a.label.toLowerCase() === name.toLowerCase())) return edit.fail('This name is already used.')
+    const value = { label: name, type, isSavings, openingBalance: cents, openingDate: date, maintainingBalance: type === 'bank' ? keep : 0 }
+    const message = account ? `Saved ${name}.` : `Added ${name}.`
+    const ok = await edit.run(message, (sheetId, wb, token) => (account ? saveAccount(sheetId, wb, account.row, value, token) : addAccount(sheetId, wb, value, token)))
     if (ok) onSaved(message)
   }
 
   return (
     <div className="space-y-3">
-      {!account && (
-        <>
-          <Field label="Name" htmlFor="acc-label" hint="An alias only, never the account number.">
-            <TextInput id="acc-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. BPI Savings" />
-          </Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Type" htmlFor="acc-type">
-              <Select id="acc-type" value={type} onChange={(e) => setType(e.target.value as 'bank' | 'cash' | 'e-wallet')}>
-                <option value="bank">Bank</option>
-                <option value="cash">Cash</option>
-                <option value="e-wallet">E-wallet</option>
-              </Select>
-            </Field>
-            <label className="mt-6 flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={isSavings} onChange={(e) => setIsSavings(e.target.checked)} /> Savings account
-            </label>
-          </div>
-        </>
-      )}
+      <Field label="Name" htmlFor="acc-label" hint="An alias only, never the account number.">
+        <TextInput id="acc-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. BPI Savings" />
+      </Field>
+      <Field label="Type" htmlFor="acc-type">
+        <Select id="acc-type" value={type} onChange={(e) => setType(e.target.value as MoneyType)}>
+          {MONEY_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input type="checkbox" className="mt-1" checked={isSavings} onChange={(e) => setIsSavings(e.target.checked)} />
+        <span>
+          Savings goal money (still usable)
+          <span className="block text-xs text-slate-500">Counts toward the savings goal, not Spendable now. You can still pay and move money from it.</span>
+        </span>
+      </label>
       <div className="grid grid-cols-2 gap-2">
         <Field label={account ? 'Starting balance (₱)' : 'Balance now (₱)'} htmlFor="acc-opening">
           <TextInput id="acc-opening" inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" />
@@ -239,7 +233,7 @@ function AccountForm({ workbook, account, onSaved }: { workbook: Workbook; accou
           <TextInput id="acc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
       </div>
-      {accountType === 'bank' && (!account || canMaintain) && (
+      {type === 'bank' && (!account || canMaintain) && (
         <Field label="Maintaining balance (₱, optional)" htmlFor="acc-keep" hint="Required by the bank; not counted as spendable. Empty = none.">
           <TextInput id="acc-keep" inputMode="decimal" value={maintaining} onChange={(e) => setMaintaining(e.target.value)} />
         </Field>
@@ -260,85 +254,6 @@ function AccountForm({ workbook, account, onSaved }: { workbook: Workbook; accou
     </div>
   )
 }
-
-function AccountsTable({ workbook }: { workbook: Workbook }) {
-  const [editing, setEditing] = useState<Editing<Account>>(null)
-  const [saved, setSaved] = useState<string | null>(null)
-  const accounts = moneyAccounts(workbook).filter((a) => a.active)
-  const balances = new Map(accountBalances(workbook).map((b) => [b.account.accountId, b.balance]))
-  const lastCheck = (id: string) =>
-    workbook.balanceChecks
-      .filter((c) => c.accountId === id)
-      .map((c) => c.date)
-      .sort()
-      .at(-1)
-  const open = (item: Account | null) => {
-    setSaved(null)
-    setEditing({ item })
-  }
-  return (
-    <>
-      <SectionHead title="Accounts" addLabel="+ Add account" onAdd={() => open(null)} />
-      <p className="mt-1 text-xs text-slate-500">
-        Balance now = last balance check (or starting balance) + entries after it.{' '}
-        <Link to="/balances" className="text-green-900 underline">
-          Check balances
-        </Link>
-      </p>
-      <table className="mt-2 w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-        <thead>
-          <tr className="border-b border-slate-100 text-left">
-            <th className={th}>Account</th>
-            <th className={`${th} text-right`}>Balance now</th>
-            <th className={`${th} hidden pl-3 sm:table-cell`}>Last check</th>
-            <th className={th}>
-              <span className="sr-only">Edit</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {accounts.map((a) => {
-            const checked = lastCheck(a.accountId)
-            return (
-              <tr key={a.accountId}>
-                <td className="py-2">
-                  <span className="font-medium text-slate-900">{a.label}</span>
-                  <span className="block text-xs text-slate-500">
-                    {TYPE_LABEL[a.type] ?? a.type}
-                    {a.isSavings && <span className="ml-1 rounded-full bg-green-100 px-1.5 text-green-900">savings</span>}
-                    {a.maintainingBalance > 0 && ` · 🔒 ${formatPeso(a.maintainingBalance)}`}
-                    <span className="sm:hidden">{checked ? ` · checked ${shortDay(checked)}` : ''}</span>
-                  </span>
-                </td>
-                <td className="py-2 text-right text-slate-900">{formatPeso(balances.get(a.accountId) ?? 0)}</td>
-                <td className="hidden py-2 pl-3 text-slate-600 sm:table-cell">{checked ? shortDay(checked) : '—'}</td>
-                <td className="py-2 text-right">
-                  <button type="button" className={editButton} aria-label={`Edit ${a.label}`} onClick={() => open(a)}>
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <SuccessNote message={saved} />
-      <Modal title={editing?.item ? `Edit ${editing.item.label}` : 'Add account'} open={editing !== null} onClose={() => setEditing(null)}>
-        <AccountForm
-          key={editing?.item?.accountId ?? 'new'}
-          workbook={workbook}
-          account={editing?.item ?? null}
-          onSaved={(message) => {
-            setEditing(null)
-            setSaved(message)
-          }}
-        />
-      </Modal>
-    </>
-  )
-}
-
-// ---- credit limits --------------------------------------------------------
 
 function CreditLimitForm({ card: c, onSaved }: { card: Card; onSaved: (message: string) => void }) {
   const edit = useSheetEdit()
@@ -364,52 +279,136 @@ function CreditLimitForm({ card: c, onSaved }: { card: Card; onSaved: (message: 
   )
 }
 
-function CreditLimits({ workbook }: { workbook: Workbook }) {
-  const [editing, setEditing] = useState<Card | null>(null)
+const groupHead = (title: string, note?: string) => (
+  <tr>
+    <th colSpan={4} className="pt-4 pb-1 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+      {title}
+      {note && <span className="ml-2 font-normal tracking-normal normal-case">{note}</span>}
+    </th>
+  </tr>
+)
+
+/** Accounts grouped as Debit, Credit (the cards), E-wallet, and Cash. */
+function AccountsTable({ workbook }: { workbook: Workbook }) {
+  const [editing, setEditing] = useState<Editing<Account>>(null)
+  const [editingCard, setEditingCard] = useState<Card | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  const accounts = moneyAccounts(workbook).filter((a) => a.active)
+  const cards = workbook.cards.filter((c) => c.active)
+  const owed = new Map(forecastCards(workbook, todayIso()).map((f) => [f.card.cardId, f.owed]))
+  const balances = new Map(accountBalances(workbook).map((b) => [b.account.accountId, b.balance]))
+  const lastCheck = (id: string) =>
+    workbook.balanceChecks
+      .filter((c) => c.accountId === id)
+      .map((c) => c.date)
+      .sort()
+      .at(-1)
+  const open = (item: Account | null) => {
+    setSaved(null)
+    setEditing({ item })
+  }
+  const done = (message: string) => {
+    setEditing(null)
+    setEditingCard(null)
+    setSaved(message)
+  }
+
+  const accountRows = (type: MoneyType) => {
+    const rows = accounts.filter((a) => a.type === type)
+    if (rows.length === 0) return null
+    return (
+      <tbody key={type} className="divide-y divide-slate-100">
+        {groupHead(TYPE_LABEL[type])}
+        {rows.map((a) => {
+          const checked = lastCheck(a.accountId)
+          return (
+            <tr key={a.accountId}>
+              <td className="py-2">
+                <span className="font-medium text-slate-900">{a.label}</span>
+                <span className="block text-xs text-slate-500">
+                  {TYPE_LABEL[a.type]}
+                  {a.isSavings && <span className="ml-1 rounded-full bg-green-100 px-1.5 text-green-900">savings goal</span>}
+                  {a.maintainingBalance > 0 && ` · 🔒 ${formatPeso(a.maintainingBalance)}`}
+                  <span className="sm:hidden">{checked ? ` · checked ${shortDay(checked)}` : ''}</span>
+                </span>
+              </td>
+              <td className="py-2 text-right text-slate-900">{formatPeso(balances.get(a.accountId) ?? 0)}</td>
+              <td className="hidden py-2 pl-3 text-slate-600 sm:table-cell">{checked ? shortDay(checked) : '—'}</td>
+              <td className="py-2 text-right">
+                <button type="button" className={editButton} aria-label={`Edit ${a.label}`} onClick={() => open(a)}>
+                  Edit
+                </button>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    )
+  }
+
+  const creditRows =
+    cards.length === 0 ? null : (
+      <tbody key="credit" className="divide-y divide-slate-100">
+        {groupHead('Credit', 'Home shows how much of each limit you use.')}
+        {cards.map((c) => (
+          <tr key={c.cardId}>
+            <td className="py-2">
+              <span className="font-medium text-slate-900">{c.name}</span>
+              <span className="block text-xs text-slate-500">Credit · limit {c.creditLimit !== null ? formatPeso(c.creditLimit) : <span className="text-slate-400">not set</span>}</span>
+            </td>
+            <td className="py-2 text-right text-slate-900">{formatPeso(owed.get(c.cardId) ?? 0)} owed</td>
+            <td className="hidden py-2 pl-3 text-slate-600 sm:table-cell">—</td>
+            <td className="py-2 text-right">
+              <button
+                type="button"
+                className={editButton}
+                aria-label={`Edit ${c.name} limit`}
+                onClick={() => {
+                  setSaved(null)
+                  setEditingCard(c)
+                }}
+              >
+                Edit
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    )
+
   return (
-    <div className={card}>
-      <SectionHead title="Credit limits" />
-      <p className="mt-1 text-xs text-slate-500">Home shows how much of each limit you use. Update a limit when the bank changes it.</p>
+    <>
+      <SectionHead title="Accounts" addLabel="+ Add account" onAdd={() => open(null)} />
+      <p className="mt-1 text-xs text-slate-500">
+        Balance now = last balance check (or starting balance) + entries after it.{' '}
+        <Link to="/balances" className="text-green-900 underline">
+          Check balances
+        </Link>
+      </p>
       <table className="mt-2 w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-        <tbody className="divide-y divide-slate-100">
-          {workbook.cards
-            .filter((c) => c.active)
-            .map((c) => (
-              <tr key={c.cardId}>
-                <td className="py-2 font-medium text-slate-900">{c.name}</td>
-                <td className="py-2 text-right text-slate-900">{c.creditLimit !== null ? formatPeso(c.creditLimit) : <span className="text-slate-400">not set</span>}</td>
-                <td className="w-16 py-2 text-right">
-                  <button
-                    type="button"
-                    className={editButton}
-                    aria-label={`Edit ${c.name} limit`}
-                    onClick={() => {
-                      setSaved(null)
-                      setEditing(c)
-                    }}
-                  >
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-        </tbody>
+        <thead>
+          <tr className="border-b border-slate-100 text-left">
+            <th className={th}>Account</th>
+            <th className={`${th} text-right`}>Balance now</th>
+            <th className={`${th} hidden pl-3 sm:table-cell`}>Last check</th>
+            <th className={th}>
+              <span className="sr-only">Edit</span>
+            </th>
+          </tr>
+        </thead>
+        {accountRows('bank')}
+        {creditRows}
+        {accountRows('e-wallet')}
+        {accountRows('cash')}
       </table>
       <SuccessNote message={saved} />
-      <Modal title={editing ? `${editing.name} credit limit` : ''} open={editing !== null} onClose={() => setEditing(null)}>
-        {editing && (
-          <CreditLimitForm
-            key={editing.cardId}
-            card={editing}
-            onSaved={(message) => {
-              setEditing(null)
-              setSaved(message)
-            }}
-          />
-        )}
+      <Modal title={editing?.item ? `Edit ${editing.item.label}` : 'Add account'} open={editing !== null} onClose={() => setEditing(null)}>
+        <AccountForm key={editing?.item?.accountId ?? 'new'} workbook={workbook} account={editing?.item ?? null} onSaved={done} />
       </Modal>
-    </div>
+      <Modal title={editingCard ? `${editingCard.name} credit limit` : ''} open={editingCard !== null} onClose={() => setEditingCard(null)}>
+        {editingCard && <CreditLimitForm key={editingCard.cardId} card={editingCard} onSaved={done} />}
+      </Modal>
+    </>
   )
 }
 
@@ -490,7 +489,7 @@ function SavingsGoal({ workbook }: { workbook: Workbook }) {
   return (
     <div className={card}>
       <h2 className="font-medium text-slate-900">Savings goal</h2>
-      <p className="mt-1 text-sm text-slate-600">Money moved into a savings account counts toward the goal. Home shows the progress each month.</p>
+      <p className="mt-1 text-sm text-slate-600">Money moved into a savings goal account (e.g. Maribank) counts toward the goal. Home shows the progress each month.</p>
       <div className="mt-3 space-y-2">
         <Field label="Per month now (₱)" htmlFor="goal-now">
           <AmountInput id="goal-now" value={now} onChange={(e) => setNow(e.target.value)} />
@@ -549,7 +548,6 @@ export function MoneySettings({ workbook }: { workbook: Workbook }) {
       <div className={card}>
         <AccountsTable workbook={workbook} />
       </div>
-      <CreditLimits workbook={workbook} />
       <SavingsGoal workbook={workbook} />
     </>
   )

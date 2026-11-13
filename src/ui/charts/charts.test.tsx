@@ -108,6 +108,26 @@ describe('FutureBillsChart', () => {
 })
 
 describe('Donut', () => {
+  it('shows a heading with the total before the parts of each group', () => {
+    const parts: DonutPart[] = [
+      { id: 'a', name: 'Payroll', amount: 10000, color: slotColor(0), group: 'Debit' },
+      { id: 'b', name: 'Maribank', amount: 5000, color: slotColor(1), group: 'Debit' },
+      { id: 'c', name: 'GCash', amount: 2000, color: slotColor(2), group: 'E-wallet' },
+    ]
+    render(
+      <MemoryRouter>
+        <Donut parts={parts} centerLabel="have" />
+      </MemoryRouter>,
+    )
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Debit₱150.00',
+      'Payroll₱100.00',
+      'Maribank₱50.00',
+      'E-wallet₱20.00',
+      'GCash₱20.00',
+    ])
+  })
+
   it('shows at most 6 parts, the rest together as Other', () => {
     const parts: DonutPart[] = Array.from({ length: 8 }, (_, i) => ({ id: `a${i}`, name: `Account ${i}`, amount: 10000, color: slotColor(i) }))
     render(

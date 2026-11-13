@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addIncome } from '../../data/actions'
-import { accountLabel } from '../../domain/accounts'
+import { accountLabel, byGroup, TYPE_LABEL } from '../../domain/accounts'
 import { accountsToCheck } from '../../domain/balances'
 import { moneyParts, moneyTotals } from '../../domain/home'
 import { incomeTypeFor, paydaysToRecord, type Payday } from '../../domain/payday'
@@ -16,22 +16,23 @@ import { parsePositiveAmount } from '../add/parseAmount'
 const panel = 'rounded-xl bg-white p-4 shadow-sm'
 const shortDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
 
-/** What we have: one part per money account (banks, cash, e-wallets), with savings and spendable-now totals. */
+/** What we have: one part per money account, grouped Debit, E-wallet, Cash, with savings goal and spendable-now totals. */
 export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
   const parts = moneyParts(workbook)
   if (parts.length === 0) return null
   const canCheck = !workbook.updates.some((u) => u.tab === 'BalanceChecks' && u.create)
   const unchecked = canCheck ? accountsToCheck(workbook, today.slice(0, 7)) : []
   const totals = moneyTotals(parts)
-  // Colors and ring order follow the account's row in the Accounts tab, not its size, so neighbors in the ring
-  // are neighbors in the palette and a color never moves.
+  // Ring order: by group (Debit, E-wallet, Cash), then by the account's row in the Accounts tab, not its size.
+  // Colors follow the row, so a color never moves.
   const order = workbook.accounts.filter((a) => a.type !== 'credit_card').map((a) => a.accountId)
   const inSheetOrder = [...parts].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
-  const donut = inSheetOrder.map((p) => ({
+  const donut = byGroup(inSheetOrder, (p) => p.type).map((p) => ({
     id: p.id,
-    name: `${p.name}${p.isSavings ? ' · savings' : ''}${p.maintaining > 0 ? ` · 🔒 ${formatPeso(p.maintaining)} maintaining` : ''}`,
+    name: `${p.name}${p.isSavings ? ' · savings goal' : ''}${p.maintaining > 0 ? ` · 🔒 ${formatPeso(p.maintaining)} maintaining` : ''}`,
     amount: Math.max(p.amount, 0),
     color: accountColor(workbook, p.id),
+    group: TYPE_LABEL[p.type],
   }))
   return (
     <div className={panel}>
@@ -48,7 +49,7 @@ export function WhatWeHave({ workbook, today }: { workbook: Workbook; today: Iso
       </div>
       <Donut parts={donut} centerLabel="have">
         <p className="mb-2 border-b border-slate-100 pb-2 text-sm text-slate-600">
-          Savings: <b className="text-slate-900">{formatPeso(totals.savings)}</b> · Spendable now: <b className="text-slate-900">{formatPeso(totals.spendable)}</b>
+          Savings goal: <b className="text-slate-900">{formatPeso(totals.savings)}</b> · Spendable now: <b className="text-slate-900">{formatPeso(totals.spendable)}</b>
         </p>
       </Donut>
       {parts.some((p) => p.amount < 0) && <p className="mt-2 text-xs text-amber-900">! An account shows less than ₱0. Check its starting balance in Settings.</p>}
