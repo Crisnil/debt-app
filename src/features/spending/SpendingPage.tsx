@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { accountLabel } from '../../domain/accounts'
+import { entries, entryAccounts, entryMonths, filterEntries, KIND_LABEL, totalsByKind, type Entry, type EntryKind } from '../../domain/activity'
 import { todayIso } from '../../domain/dues'
 import { plannedLiving } from '../../domain/payoff'
-import { spendingItems, type SpendingItem } from '../../domain/reconcile'
-import { categoryOf, filterSpending, paidFromOptions, spendingByCategory, spendingMonths, type CategorySpending } from '../../domain/spending'
+import type { SpendingItem } from '../../domain/reconcile'
+import { categoryOf, spendingByCategory, type CategorySpending } from '../../domain/spending'
 import type { IsoDate, Workbook } from '../../domain/types'
 import { formatPeso } from '../../lib/money'
 import { monthLabel, OTHER_COLOR, STATUS } from '../../ui/charts/palette'
@@ -80,70 +81,140 @@ function BudgetCard({ rows, selected, onSelect }: { rows: CategorySpending[]; se
   )
 }
 
-function PurchaseList({ workbook, items, onOpen }: { workbook: Workbook; items: SpendingItem[]; onOpen: (item: SpendingItem) => void }) {
-  if (items.length === 0) return <p className="text-sm text-slate-500">Nothing here.</p>
+
+const KINDS: EntryKind[] = ['purchase', 'in', 'move', 'payment']
+const KIND_PLURAL: Record<EntryKind, string> = { purchase: 'Purchases', in: 'Money in', move: 'Moves', payment: 'Card payments' }
+
+/** The second line of a row: date, kind, and where the money went. */
+function entryDetail(workbook: Workbook, e: Entry): string {
+  if (e.item) return `${shortDay(e.date)} · ${categoryOf(e.item)} · ${accountLabel(workbook, e.from)} · ${SOURCE[e.item.source]}`
+  const where = e.kind === 'in' ? `to ${accountLabel(workbook, e.to)}` : e.kind === 'payment' ? `from ${accountLabel(workbook, e.from)}` : ''
+  return [shortDay(e.date), KIND_LABEL[e.kind], where, e.note].filter(Boolean).join(' · ')
+}
+
+function EntryList({ workbook, list, onOpen }: { workbook: Workbook; list: Entry[]; onOpen: (entry: Entry) => void }) {
+  if (list.length === 0) return <p className="text-sm text-slate-500">Nothing here.</p>
   return (
     <ul className="divide-y divide-slate-100 text-sm">
-      {items.map((i, n) => (
-        <li key={`${i.date}-${i.methodId}-${i.label}-${n}`}>
-          <button
-            type="button"
-            onClick={() => onOpen(i)}
-            aria-label={`${i.label || '(no description)'} ${formatPeso(i.amount)}: correct or void`}
-            className="-mx-2 flex w-[calc(100%+1rem)] items-baseline justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
-          >
-            <span className="min-w-0">
-              <span className="block truncate font-medium text-slate-900">{i.label || '(no description)'}</span>
-              <span className="block text-xs text-slate-500">
-                {shortDay(i.date)} · {categoryOf(i)} · {accountLabel(workbook, i.methodId)} · {SOURCE[i.source]}
+      {list.map((e) => {
+        const label = e.label || '(no description)'
+        const moneyIn = e.kind === 'in' || (e.kind === 'purchase' && e.amount < 0)
+        return (
+          <li key={e.key}>
+            <button
+              type="button"
+              onClick={() => onOpen(e)}
+              aria-label={`${label} ${formatPeso(e.amount)}: ${e.item ? 'correct or void' : 'details'}`}
+              className="-mx-2 flex w-[calc(100%+1rem)] items-baseline justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-slate-900">{label}</span>
+                <span className="block text-xs text-slate-500">{entryDetail(workbook, e)}</span>
               </span>
-            </span>
-            <span className={`shrink-0 ${i.amount < 0 ? 'text-green-900' : 'text-slate-800'}`}>{formatPeso(i.amount)}</span>
-          </button>
-        </li>
-      ))}
+              <span className={`shrink-0 ${moneyIn ? 'text-green-900' : e.kind === 'purchase' ? 'text-slate-800' : 'text-slate-500'}`}>
+                {e.kind === 'in' ? '+' : ''}
+                {formatPeso(e.amount)}
+              </span>
+            </button>
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
-/** Every purchase once (card statements + entries), with filters and budget vs actual per category. */
+/** A move, money in, or card payment. The app cannot change these yet, so the dialog says where to. */
+function EntryDetails({ workbook, entry: e }: { workbook: Workbook; entry: Entry }) {
+  const from = e.kind === 'in' ? e.label : accountLabel(workbook, e.from)
+  return (
+    <div className="space-y-3 text-sm">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+        <dt className="text-slate-500">What</dt>
+        <dd className="text-slate-900">{KIND_LABEL[e.kind]}</dd>
+        <dt className="text-slate-500">Date</dt>
+        <dd className="text-slate-900">{shortDay(e.date)}</dd>
+        <dt className="text-slate-500">Amount</dt>
+        <dd className="text-slate-900">{formatPeso(e.amount)}</dd>
+        <dt className="text-slate-500">From</dt>
+        <dd className="text-slate-900">{from}</dd>
+        <dt className="text-slate-500">To</dt>
+        <dd className="text-slate-900">{accountLabel(workbook, e.to)}</dd>
+        {e.note && (
+          <>
+            <dt className="text-slate-500">Note</dt>
+            <dd className="text-slate-900">{e.note}</dd>
+          </>
+        )}
+      </dl>
+      <p className="text-slate-600">Not spending. To change or remove it, edit the {e.tab} tab of the sheet.</p>
+    </div>
+  )
+}
+
+/** Every entry once (purchases, money in, moves, card payments), with filters, month totals, and budget vs actual. */
 export function SpendingView({ workbook, today }: { workbook: Workbook; today: IsoDate }) {
-  const all = spendingItems(workbook)
-  const [open, setOpen] = useState<SpendingItem | null>(null)
+  const all = entries(workbook)
+  const [open, setOpen] = useState<Entry | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [month, setMonth] = useState(today.slice(0, 7))
-  const [methodId, setMethodId] = useState('')
+  const [kind, setKind] = useState<EntryKind | ''>('')
+  const [accountId, setAccountId] = useState('')
   const [category, setCategory] = useState('')
-  const inMonth = filterSpending(all, { month, methodId: '', category: '' })
-  const forMethod = filterSpending(inMonth, { month, methodId, category: '' })
-  const shown = filterSpending(forMethod, { month, methodId, category })
-  const rows = spendingByCategory(workbook, forMethod)
-  const total = forMethod.reduce((s, i) => s + i.amount, 0)
+  const inMonth = filterEntries(all, { month, kind: '', accountId: '', category: '' })
+  const forAccount = filterEntries(inMonth, { month, kind: '', accountId, category: '' })
+  const shown = filterEntries(forAccount, { month, kind, accountId, category })
+  const purchases = forAccount.flatMap((e) => (e.item ? [e.item] : []))
+  const rows = spendingByCategory(workbook, purchases)
+  const totals = totalsByKind(forAccount)
   const plan = plannedLiving(workbook, month)
+  const movedIn = forAccount.filter((e) => e.kind === 'move' && e.to === accountId).reduce((s, e) => s + e.amount, 0)
   // Keep a chosen filter in its list after the month changes, so the select shows what is filtered.
-  const methods = paidFromOptions(workbook, inMonth)
-  if (methodId && !methods.some((o) => o.value === methodId)) methods.push({ value: methodId, label: accountLabel(workbook, methodId) })
+  const accounts = entryAccounts(workbook, inMonth)
+  if (accountId && !accounts.some((o) => o.value === accountId)) accounts.push({ value: accountId, label: accountLabel(workbook, accountId) })
   const categories = rows.map((r) => r.category)
   if (category && !categories.includes(category)) categories.push(category)
 
+  function chooseCategory(value: string) {
+    setCategory(value)
+    if (value) setKind('purchase')
+  }
+
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">Spending</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">Transactions</h1>
       <div className={panel}>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Field label="Month" htmlFor="sp-month">
             <Select id="sp-month" value={month} onChange={(e) => setMonth(e.target.value)}>
-              {spendingMonths(all, today.slice(0, 7)).map((m) => (
+              {entryMonths(all, today.slice(0, 7)).map((m) => (
                 <option key={m} value={m}>
                   {monthLabel(m)}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Paid from" htmlFor="sp-method">
-            <Select id="sp-method" value={methodId} onChange={(e) => setMethodId(e.target.value)}>
+          <Field label="Type" htmlFor="sp-kind">
+            <Select
+              id="sp-kind"
+              value={kind}
+              onChange={(e) => {
+                const value = e.target.value as EntryKind | ''
+                setKind(value)
+                if (value !== 'purchase') setCategory('')
+              }}
+            >
               <option value="">All</option>
-              {methods.map((o) => (
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_PLURAL[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Account" htmlFor="sp-account">
+            <Select id="sp-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              <option value="">All</option>
+              {accounts.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -151,7 +222,7 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
             </Select>
           </Field>
           <Field label="Category" htmlFor="sp-category">
-            <Select id="sp-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <Select id="sp-category" value={category} onChange={(e) => chooseCategory(e.target.value)}>
               <option value="">All</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
@@ -161,53 +232,77 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
             </Select>
           </Field>
         </div>
-        <p className="mt-3 text-3xl font-semibold text-slate-900">{formatPeso(total)}</p>
-        {plan !== null && plan > 0 && !methodId && (
-          <p className={`text-sm ${total > plan ? 'text-red-800' : 'text-slate-700'}`}>
-            {Math.round((total / plan) * 100)}% of the Plan ({formatPeso(plan)} for the month)
-            {total > plan ? ` · ${formatPeso(total - plan)} over` : ` · ${formatPeso(plan - total)} left`}
+        <p className="mt-3 text-xs text-slate-500">Spent in {monthLabel(month)}{accountId && ` from ${accountLabel(workbook, accountId)}`}</p>
+        <p className="text-3xl font-semibold text-slate-900">{formatPeso(totals.purchase)}</p>
+        {plan !== null && plan > 0 && !accountId && (
+          <p className={`text-sm ${totals.purchase > plan ? 'text-red-800' : 'text-slate-700'}`}>
+            {Math.round((totals.purchase / plan) * 100)}% of the Plan ({formatPeso(plan)} for the month)
+            {totals.purchase > plan ? ` · ${formatPeso(totals.purchase - plan)} over` : ` · ${formatPeso(plan - totals.purchase)} left`}
           </p>
         )}
+        <p className="mt-1 text-sm text-slate-700" aria-label="Month totals">
+          Money in <b className="text-green-900">{formatPeso(totals.in)}</b>
+          {accountId ? (
+            <>
+              {' '}
+              · Moved in <b className="text-slate-900">{formatPeso(movedIn)}</b> · Moved out <b className="text-slate-900">{formatPeso(totals.move - movedIn)}</b>
+            </>
+          ) : (
+            <>
+              {' '}
+              · Moved <b className="text-slate-900">{formatPeso(totals.move)}</b>
+            </>
+          )}{' '}
+          · Card payments <b className="text-slate-900">{formatPeso(totals.payment)}</b>
+        </p>
         <p className="text-xs text-slate-500">
-          Spent in {monthLabel(month)}
-          {methodId && ` from ${accountLabel(workbook, methodId)}`} · {forMethod.length} {forMethod.length === 1 ? 'purchase' : 'purchases'}. Installments and
-          card payments are not spending.
+          {purchases.length} {purchases.length === 1 ? 'purchase' : 'purchases'}. Moves, card payments, and installments are not spending.
         </p>
       </div>
       <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-6 lg:space-y-0">
-        <BudgetCard rows={rows} selected={category} onSelect={setCategory} />
+        <BudgetCard rows={rows} selected={category} onSelect={chooseCategory} />
         <div className={panel}>
           <h2 className="mb-2 font-medium text-slate-900">
-            Purchases{category && ` · ${category}`}
-            {category && (
-              <button type="button" className="ml-2 text-sm font-normal text-green-900 underline" onClick={() => setCategory('')}>
+            {kind ? KIND_PLURAL[kind] : 'All entries'}
+            {category && ` · ${category}`}
+            {(category || kind) && (
+              <button
+                type="button"
+                className="ml-2 text-sm font-normal text-green-900 underline"
+                onClick={() => {
+                  setCategory('')
+                  setKind('')
+                }}
+              >
                 Show all
               </button>
             )}
           </h2>
-          <p className="mb-2 text-xs text-slate-500">Tap a purchase to correct or void it.</p>
+          <p className="mb-2 text-xs text-slate-500">Tap a purchase to correct or void it, or any other entry to see its details.</p>
           <SuccessNote message={saved} />
-          <PurchaseList
+          <EntryList
             workbook={workbook}
-            items={shown}
-            onOpen={(item) => {
+            list={shown}
+            onOpen={(entry) => {
               setSaved(null)
-              setOpen(item)
+              setOpen(entry)
             }}
           />
         </div>
       </div>
-      <Modal title={open ? open.label || 'Purchase' : ''} open={open !== null} onClose={() => setOpen(null)}>
-        {open && (
+      <Modal title={open ? (open.item ? open.label || 'Purchase' : KIND_LABEL[open.kind]) : ''} open={open !== null} onClose={() => setOpen(null)}>
+        {open?.item ? (
           <ItemDialogBody
-            key={`${open.date}-${open.label}-${open.amount}`}
+            key={open.key}
             workbook={workbook}
-            item={open}
+            item={open.item}
             onSaved={(message) => {
               setOpen(null)
               setSaved(message)
             }}
           />
+        ) : (
+          open && <EntryDetails workbook={workbook} entry={open} />
         )}
       </Modal>
     </section>
@@ -215,5 +310,5 @@ export function SpendingView({ workbook, today }: { workbook: Workbook; today: I
 }
 
 export function SpendingPage() {
-  return <WithWorkbook title="Spending">{(_sheetId, workbook) => <SpendingView workbook={workbook} today={todayIso()} />}</WithWorkbook>
+  return <WithWorkbook title="Transactions">{(_sheetId, workbook) => <SpendingView workbook={workbook} today={todayIso()} />}</WithWorkbook>
 }

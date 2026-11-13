@@ -39,6 +39,13 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument()
   })
 
+  it('opens Transactions from the nav, and from old Spending links', async () => {
+    renderAt('/spending')
+    expect(screen.getByRole('heading', { name: 'Transactions' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Transactions' })).toHaveAttribute('href', '/transactions')
+    expect(screen.queryByRole('link', { name: 'Spending' })).not.toBeInTheDocument()
+  })
+
   it('opens the + menu with three actions, closes it with Escape, and hides the button on the Add page', async () => {
     renderAt('/')
     const plus = screen.getByRole('button', { name: 'Add' })
