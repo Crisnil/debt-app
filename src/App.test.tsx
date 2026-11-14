@@ -35,8 +35,19 @@ describe('App shell', () => {
 
   it('navigates with the bottom nav', async () => {
     renderAt('/')
-    await userEvent.click(screen.getByRole('link', { name: 'Plan' }))
-    expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Stats' }))
+    expect(screen.getByRole('heading', { name: 'Statistics' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Cards' })).not.toBeInTheDocument()
+  })
+
+  it.each(['/cards', '/plan'])('opens old %s links on Stats', (path) => {
+    renderAt(path)
+    expect(screen.getByRole('heading', { name: 'Statistics' })).toBeInTheDocument()
+  })
+
+  it('marks Stats in the nav on a card page', () => {
+    renderAt('/cards/alpha')
+    expect(screen.getByRole('link', { name: 'Stats' })).toHaveClass('font-semibold')
   })
 
   it('opens Transactions from the nav, and from old Spending links', async () => {
@@ -75,11 +86,12 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
   })
 
-  it('has Plan, Check balances, and Settings under More', () => {
+  it('has Bills, Check balances, and Settings under More; Plan is in Stats', () => {
     renderAt('/more')
     expect(screen.getByRole('heading', { name: 'More' })).toBeInTheDocument()
     const main = screen.getByRole('main')
-    expect(within(main).getByRole('link', { name: /^Plan/ })).toHaveAttribute('href', '/plan')
+    expect(within(main).getByRole('link', { name: /^Bills/ })).toHaveAttribute('href', '/bills')
+    expect(within(main).queryByRole('link', { name: /^Plan/ })).not.toBeInTheDocument()
     expect(within(main).getByRole('link', { name: /^Check balances/ })).toHaveAttribute('href', '/balances')
     expect(within(main).getByRole('link', { name: /^Settings/ })).toHaveAttribute('href', '/settings')
   })

@@ -1,5 +1,6 @@
 import type { Centavos } from '../lib/money'
-import { accountBalances } from './balances'
+import { entries } from './activity'
+import { accountBalances, savedInMonth } from './balances'
 import { daysBetween, summarizeDues } from './dues'
 import { billsByMonth, installmentsEnding, monthlyIncome, PAYABLES, withPayables, type CardForecast, type PlanEnding } from './forecast'
 import { addMonths, payableMonths, payablesOwed } from './payables'
@@ -105,4 +106,16 @@ export function thisMonth(wb: Workbook, forecasts: CardForecast[], today: IsoDat
 /** The next installment plan(s) to end from this month on: bills drop by `monthly` after `lastDue`. */
 export function nextDrop(forecasts: CardForecast[], today: IsoDate): PlanEnding | null {
   return installmentsEnding(forecasts).find((e) => e.lastDue >= today.slice(0, 7)) ?? null
+}
+
+export type MonthFlow = { month: string; spent: Centavos; saved: Centavos }
+
+/** The last `count` months, oldest first: spending (purchases less refunds) and net money moved into savings accounts. */
+export function monthlyFlow(wb: Workbook, today: IsoDate, count = 6): MonthFlow[] {
+  const purchases = entries(wb).filter((e) => e.kind === 'purchase')
+  return Array.from({ length: count }, (_, i) => addMonths(today.slice(0, 7), i - count + 1)).map((month) => ({
+    month,
+    spent: purchases.filter((e) => e.date.startsWith(month)).reduce((s, e) => s + e.amount, 0),
+    saved: savedInMonth(wb, month),
+  }))
 }

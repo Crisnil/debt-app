@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { MonthBills } from '../../domain/forecast'
 import { formatPeso } from '../../lib/money'
+import { topRounded, useWidth } from './shapes'
 import { monthLabel, niceStep, OTHER_COLOR, shortPeso } from './palette'
 
 /** One stack in the chart: a card, or Bills & payables. The color comes from the card's row in the sheet. */
@@ -34,33 +35,11 @@ const H = 220
 const PAD = { left: 44, right: 8, top: 22, bottom: 24 }
 const GAP = 2
 
-/** Rectangle with rounded top corners (the data end) and a square base. */
-function topRounded(x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, h, w / 2)
-  return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`
-}
-
 /**
  * Bills per due month, stacked by card. Solid = committed (statement, installments, logged, carried);
  * hatched = usual spending not logged yet (estimate). The line is the monthly income in the plan.
  * Tap or focus a month to see its breakdown below the chart.
  */
-/** Width of the element in CSS pixels, so the chart draws at its real size and text stays 11px on phones. */
-function useWidth(fallback: number) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(fallback)
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    if (el.clientWidth > 0) setWidth(Math.max(el.clientWidth, 280))
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(Math.round(entry.contentRect.width), 280)))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-  return [ref, width] as const
-}
-
 export function FutureBillsChart(props: { months: MonthBills[]; series: BillSeries[]; income: number }) {
   const { months, series } = foldOther(props.months, props.series)
   const income = props.income

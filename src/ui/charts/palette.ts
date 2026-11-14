@@ -28,6 +28,8 @@ export const accountColor = (wb: Workbook, accountId: string) =>
 // Not the status red and green: those two look alike to many color-blind people.
 export const OWED_COLOR = SERIES[1]
 export const SAVED_COLOR = SERIES[0]
+/** Spending in the Spent vs saved chart: dark, not orange, because it is spending, not debt. */
+export const SPENT_COLOR = '#334155'
 
 // Status colors (good / watch / careful / bad = green / yellow / orange / red). Never used for a series.
 // Always shown with an icon and a word, so the meaning does not depend on color.

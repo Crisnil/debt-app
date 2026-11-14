@@ -33,7 +33,7 @@ export function CardPage() {
           .map((t) => ({ value: t.value as Tab, label: t.value === 'check' && toCheck > 0 ? `Check · ${toCheck}` : t.label }))
         return (
           <section className="max-w-2xl space-y-4">
-            <Link to="/cards" className="text-sm text-green-900 underline">
+            <Link to="/stats?tab=cards" className="text-sm text-green-900 underline">
               ← Cards
             </Link>
             <h1 className="text-2xl font-semibold text-slate-900">{card.name}</h1>

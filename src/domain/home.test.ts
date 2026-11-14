@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseWorkbook } from '../data/workbook'
 import { fixtureTabs, fixtureValues } from '../test/fixtures'
 import { forecastCards } from './forecast'
-import { carriedAlerts, dueItems, lastInstallment, nextDrop, owedParts, savingsParts, thisMonth } from './home'
+import { carriedAlerts, dueItems, lastInstallment, monthlyFlow, nextDrop, owedParts, savingsParts, thisMonth } from './home'
 import type { Workbook } from './types'
 
 const base = parseWorkbook('Sample', fixtureTabs, fixtureValues)
@@ -44,5 +44,14 @@ describe('home summary', () => {
 
   it('sums the bills due this month against the income', () => {
     expect(thisMonth(base, forecasts, TODAY)).toEqual({ month: '2030-01', bills: 300000, income: 4000000, interest: 0 })
+  })
+
+  it('gives spending and money moved to savings per month, oldest first, net of moves out of savings', () => {
+    // Dec: ₱999 into Piggy Bank. Jan: ₱300 in, ₱100 out.
+    expect(monthlyFlow(base, TODAY, 3)).toEqual([
+      { month: '2029-11', spent: 0, saved: 0 },
+      { month: '2029-12', spent: 0, saved: 99900 },
+      { month: '2030-01', spent: 465025, saved: 20000 },
+    ])
   })
 })
